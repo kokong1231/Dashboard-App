@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Pure black background -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M0,0 H108 V108 H0 Z"/>
+    <!-- Subtle grid lines (matrix feel) -->
+    <path
+        android:pathData="M0,27 H108 M0,54 H108 M0,81 H108 M27,0 V108 M54,0 V108 M81,0 V108"
+        android:strokeColor="#00ff41"
+        android:strokeWidth="0.3"
+        android:strokeAlpha="0.15"/>
+</vector>

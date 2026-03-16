@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Matrix rain stream 1: x=18 -->
+    <path android:pathData="M18,14 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#e0ffe8"/>
+    <path android:pathData="M18,26 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" android:fillColor="#00ff41" android:fillAlpha="0.7"/>
+    <path android:pathData="M18,36 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" android:fillColor="#00ff41" android:fillAlpha="0.45"/>
+    <path android:pathData="M18,45 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" android:fillColor="#00ff41" android:fillAlpha="0.25"/>
+    <path android:pathData="M18,53 m-1.5,0 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0" android:fillColor="#00ff41" android:fillAlpha="0.12"/>
+
+    <!-- Matrix rain stream 2: x=36, offset 22 -->
+    <path android:pathData="M36,36 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#e0ffe8"/>
+    <path android:pathData="M36,48 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" android:fillColor="#00ff41" android:fillAlpha="0.7"/>
+    <path android:pathData="M36,58 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" android:fillColor="#00ff41" android:fillAlpha="0.45"/>
+    <path android:pathData="M36,67 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" android:fillColor="#00ff41" android:fillAlpha="0.25"/>
+    <path android:pathData="M36,75 m-1.5,0 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0" android:fillColor="#00ff41" android:fillAlpha="0.12"/>
+
+    <!-- Matrix rain stream 3: x=54, offset 8 -->
+    <path android:pathData="M54,20 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#e0ffe8"/>
+    <path android:pathData="M54,32 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" android:fillColor="#00ff41" android:fillAlpha="0.7"/>
+    <path android:pathData="M54,42 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" android:fillColor="#00ff41" android:fillAlpha="0.45"/>
+    <path android:pathData="M54,51 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" android:fillColor="#00ff41" android:fillAlpha="0.25"/>
+    <path android:pathData="M54,59 m-1.5,0 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0" android:fillColor="#00ff41" android:fillAlpha="0.12"/>
+    <path android:pathData="M54,66 m-1,0 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0" android:fillColor="#00ff41" android:fillAlpha="0.06"/>
+
+    <!-- Matrix rain stream 4: x=72, offset 44 -->
+    <path android:pathData="M72,54 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#e0ffe8"/>
+    <path android:pathData="M72,66 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" android:fillColor="#00ff41" android:fillAlpha="0.7"/>
+    <path android:pathData="M72,76 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" android:fillColor="#00ff41" android:fillAlpha="0.45"/>
+    <path android:pathData="M72,85 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" android:fillColor="#00ff41" android:fillAlpha="0.25"/>
+
+    <!-- Matrix rain stream 5: x=90, offset 30 -->
+    <path android:pathData="M90,40 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#e0ffe8"/>
+    <path android:pathData="M90,52 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" android:fillColor="#00ff41" android:fillAlpha="0.7"/>
+    <path android:pathData="M90,62 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" android:fillColor="#00ff41" android:fillAlpha="0.45"/>
+    <path android:pathData="M90,71 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" android:fillColor="#00ff41" android:fillAlpha="0.25"/>
+
+    <!-- "OHS" label at bottom — simple block letters -->
+    <!-- O -->
+    <path
+        android:pathData="M14,88 C14,84 17,82 20,82 C23,82 26,84 26,88 L26,96 C26,100 23,102 20,102 C17,102 14,100 14,96 Z"
+        android:strokeColor="#00ff41"
+        android:strokeWidth="2.5"
+        android:fillColor="#00000000"
+        android:strokeAlpha="0.9"/>
+    <!-- H -->
+    <path
+        android:pathData="M31,82 L31,102 M31,92 L43,92 M43,82 L43,102"
+        android:strokeColor="#00ff41"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.9"/>
+    <!-- S -->
+    <path
+        android:pathData="M58,85 C58,82 50,82 50,88 C50,94 58,94 58,100 C58,104 50,104 50,101"
+        android:strokeColor="#00ff41"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:strokeAlpha="0.9"/>
+
+    <!-- Cursor blink after OHS -->
+    <path
+        android:pathData="M63,99 L70,99"
+        android:strokeColor="#e0ffe8"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.85"/>
+</vector>
