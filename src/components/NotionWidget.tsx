@@ -10,7 +10,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import * as Animatable from 'react-native-animatable';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/navigation/RootNavigator';
@@ -19,6 +18,7 @@ import { fetchPageBlocks, queryDatabasePages, richTextToPlain } from '@/api/noti
 import { NotionBlock, NotionPageListItem, NotionRichText } from '@/types';
 import { formatRelativeTime } from '@/utils/formatters';
 import GlowBox from './GlowBox';
+import PulseText from './PulseText';
 import { COLORS, FONTS, SPACING } from '@/theme';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -277,9 +277,9 @@ function HomeView({ onNavigatePage, onNavigateDb }: HomeViewProps) {
   if (isLoading && databases.length === 0 && pages.length === 0) {
     return (
       <View style={styles.centered}>
-        <Animatable.Text animation="flash" iterationCount="infinite" duration={1200} style={styles.loadingText}>
+        <PulseText style={styles.loadingText} duration={600}>
           {'> CONNECTING TO NOTION...'}
-        </Animatable.Text>
+        </PulseText>
       </View>
     );
   }

@@ -18,6 +18,9 @@ const CHAR_H = 16;
 const CHAR_W = Math.floor(width / NUM_STREAMS);
 const ROWS = Math.ceil(height / CHAR_H) + 2;
 
+// Single interval tick: ~240ms — one random char mutated per tick across all streams
+const TICK_MS = 240;
+
 function randomChar(): string {
   return CHARS[Math.floor(Math.random() * CHARS.length)];
 }
@@ -33,7 +36,7 @@ interface StreamConfig {
 const STREAM_CONFIGS: StreamConfig[] = Array.from({ length: NUM_STREAMS }, (_, i) => {
   const length = 7 + Math.floor(Math.random() * 14);
   const duration = 1800 + Math.floor(Math.random() * 3200);
-  const delay = Math.floor(Math.random() * duration); // stagger starts
+  const delay = Math.floor(Math.random() * duration);
   return { x: i * CHAR_W, length, duration, delay };
 });
 
@@ -68,18 +71,17 @@ const MatrixChar = memo(({ char, rowIndex, headY, streamLength }: MatrixCharProp
   return <Animated.Text style={[styles.char, animStyle]}>{char}</Animated.Text>;
 });
 
-// ── Stream column ─────────────────────────────────────────────────────────────
+// ── Stream column — no local state, no local interval ────────────────────────
 
 interface StreamColumnProps {
   config: StreamConfig;
+  chars: string[];
 }
 
-const StreamColumn = memo(({ config }: StreamColumnProps) => {
+const StreamColumn = memo(({ config, chars }: StreamColumnProps) => {
   const headY = useSharedValue(-config.length);
-  const [chars, setChars] = useState(() => Array.from({ length: ROWS }, randomChar));
 
   useEffect(() => {
-    // headY: -length → ROWS+length, looping smoothly, staggered by delay
     headY.value = -config.length;
     headY.value = withDelay(
       config.delay,
@@ -92,18 +94,6 @@ const StreamColumn = memo(({ config }: StreamColumnProps) => {
         false,
       ),
     );
-
-    // Mutate one random character every ~250ms
-    const charInterval = 220 + Math.floor(Math.random() * 120);
-    const id = setInterval(() => {
-      setChars(prev => {
-        const next = [...prev];
-        next[Math.floor(Math.random() * ROWS)] = randomChar();
-        return next;
-      });
-    }, charInterval);
-
-    return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -122,15 +112,38 @@ const StreamColumn = memo(({ config }: StreamColumnProps) => {
   );
 });
 
-// ── Root ──────────────────────────────────────────────────────────────────────
+// ── Root — owns all chars state, single interval ──────────────────────────────
 
-const MatrixBackground = memo(() => (
-  <View style={StyleSheet.absoluteFill} pointerEvents="none">
-    {STREAM_CONFIGS.map((config, i) => (
-      <StreamColumn key={i} config={config} />
-    ))}
-  </View>
-));
+const MatrixBackground = memo(() => {
+  const [allChars, setAllChars] = useState<string[][]>(() =>
+    Array.from({ length: NUM_STREAMS }, () =>
+      Array.from({ length: ROWS }, randomChar),
+    ),
+  );
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const si = Math.floor(Math.random() * NUM_STREAMS);
+      const ri = Math.floor(Math.random() * ROWS);
+      setAllChars(prev => {
+        const next = [...prev];
+        const col = [...next[si]];
+        col[ri] = randomChar();
+        next[si] = col;
+        return next;
+      });
+    }, TICK_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {STREAM_CONFIGS.map((config, i) => (
+        <StreamColumn key={i} config={config} chars={allChars[i]} />
+      ))}
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   stream: {

@@ -8,13 +8,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import * as Animatable from 'react-native-animatable';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/navigation/RootNavigator';
 import { useNewsStore } from '@/store/useNewsStore';
 import { formatRelativeTime } from '@/utils/formatters';
 import GlowBox from './GlowBox';
+import PulseText from './PulseText';
 import { COLORS, FONTS, SPACING } from '@/theme';
 import { useInterval } from '@/hooks/useInterval';
 
@@ -64,13 +64,9 @@ export default function NewsWidget() {
   if (isLoading && items.length === 0) {
     return (
       <GlowBox title="◈ AI//NEWS_FEED" style={styles.box}>
-        <Animatable.Text
-          animation="flash"
-          iterationCount="infinite"
-          duration={1200}
-          style={styles.loading}>
+        <PulseText style={styles.loading} duration={600}>
           {'> SCANNING FEEDS...'}
-        </Animatable.Text>
+        </PulseText>
       </GlowBox>
     );
   }

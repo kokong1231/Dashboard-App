@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import * as Animatable from 'react-native-animatable';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import GlowBox from './GlowBox';
 import { COLORS, FONTS, SPACING } from '@/theme';
 import { useInterval } from '@/hooks/useInterval';
@@ -19,6 +19,11 @@ const QUOTES = [
   { text: 'Talk is cheap. Show me the code.', src: 'L. TORVALDS' },
   { text: 'In theory there is no difference between theory and practice, but in practice there is.', src: 'Y. BERRA' },
 ];
+
+// Stats update every ~3s (3 ticks of 1s interval)
+const STATS_EVERY = 3;
+// Quote rotates every 12 ticks
+const QUOTE_EVERY = 12;
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, n));
@@ -53,32 +58,33 @@ function BarRow({ label, value, max, color }: { label: string; value: number; ma
 export default function SysMonitorWidget() {
   const [stats, setStats] = useState<Stats>({ cpu: 38, mem: 61, netUp: 12, netDown: 48 });
   const [quoteIdx, setQuoteIdx] = useState(0);
-  const [uptime, setUptime] = useState(0); // seconds since mount
+  const [uptime, setUptime] = useState(0);
 
-  const uptimeRef = useRef(0);
+  // Single 1s interval drives uptime, stats (every STATS_EVERY ticks), and quotes (every QUOTE_EVERY ticks)
+  const tickRef = useRef(0);
 
   useEffect(() => {
     const id = setInterval(() => {
-      uptimeRef.current += 1;
-      setUptime(uptimeRef.current);
+      tickRef.current += 1;
+      const tick = tickRef.current;
+
+      setUptime(tick);
+
+      if (tick % STATS_EVERY === 0) {
+        setStats(prev => ({
+          cpu: fluctuate(prev.cpu, 8, 92, 10),
+          mem: fluctuate(prev.mem, 40, 85, 5),
+          netUp: fluctuate(prev.netUp, 1, 120, 15),
+          netDown: fluctuate(prev.netDown, 1, 240, 25),
+        }));
+      }
+
+      if (tick % QUOTE_EVERY === 0) {
+        setQuoteIdx(i => (i + 1) % QUOTES.length);
+      }
     }, 1000);
     return () => clearInterval(id);
   }, []);
-
-  // Stats fluctuate every 2.5s
-  useInterval(() => {
-    setStats(prev => ({
-      cpu: fluctuate(prev.cpu, 8, 92, 10),
-      mem: fluctuate(prev.mem, 40, 85, 5),
-      netUp: fluctuate(prev.netUp, 1, 120, 15),
-      netDown: fluctuate(prev.netDown, 1, 240, 25),
-    }));
-  }, 2500);
-
-  // Rotate quote every 12s
-  useInterval(() => {
-    setQuoteIdx(i => (i + 1) % QUOTES.length);
-  }, 12000);
 
   const h = Math.floor(uptime / 3600);
   const m = Math.floor((uptime % 3600) / 60);
@@ -115,12 +121,12 @@ export default function SysMonitorWidget() {
 
       <View style={styles.divider} />
 
-      {/* Quote */}
+      {/* Quote — key change triggers FadeIn entering animation */}
       <Text style={styles.quoteHeader}>{'> THOUGHT STREAM'}</Text>
-      <Animatable.View key={quoteIdx} animation="fadeIn" duration={800}>
+      <Animated.View key={quoteIdx} entering={FadeIn.duration(800)}>
         <Text style={styles.quoteText}>{`"${quote.text}"`}</Text>
         <Text style={styles.quoteSrc}>{`  — ${quote.src}`}</Text>
-      </Animatable.View>
+      </Animated.View>
     </GlowBox>
   );
 }

@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import * as Animatable from 'react-native-animatable';
 import { useWeatherStore } from '@/store/useWeatherStore';
 import {
   formatTemp,
@@ -11,6 +10,7 @@ import {
   windDegToDir,
 } from '@/utils/formatters';
 import GlowBox from './GlowBox';
+import PulseText from './PulseText';
 import { COLORS, FONTS, SPACING } from '@/theme';
 
 function Row({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
@@ -45,13 +45,9 @@ export default function WeatherWidget() {
   if (isLoading && !data) {
     return (
       <GlowBox title="◈ WEATHER_SYS" style={styles.box}>
-        <Animatable.Text
-          animation="flash"
-          iterationCount="infinite"
-          duration={1200}
-          style={styles.loading}>
+        <PulseText style={styles.loading} duration={600}>
           {'> ACQUIRING DATA...'}
-        </Animatable.Text>
+        </PulseText>
       </GlowBox>
     );
   }

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Platform, StatusBar, StyleSheet, View } from 'react-native';
-import * as Animatable from 'react-native-animatable';
+import Animated, { FadeIn, FadeInUp, SlideInLeft, SlideInRight } from 'react-native-reanimated';
 import { useWeatherStore } from '@/store/useWeatherStore';
 import { useNewsStore } from '@/store/useNewsStore';
 import { useNotionStore } from '@/store/useNotionStore';
@@ -47,12 +47,12 @@ export default function DashboardScreen() {
       {/* Scanline overlay */}
       <View style={styles.scanlines} pointerEvents="none" />
 
-      <Animatable.View animation="fadeIn" duration={800} style={styles.content}>
+      <Animated.View entering={FadeIn.duration(800)} style={styles.content}>
         <HeaderBar />
 
         <View style={styles.columns}>
           {/* Left: Weather + Calendar */}
-          <Animatable.View animation="slideInLeft" duration={600} delay={200} style={styles.colLeft}>
+          <Animated.View entering={SlideInLeft.duration(600).delay(200)} style={styles.colLeft}>
             <View style={styles.leftStack}>
               <View style={styles.weatherArea}>
                 <WeatherWidget />
@@ -61,15 +61,15 @@ export default function DashboardScreen() {
                 <CalendarWidget />
               </View>
             </View>
-          </Animatable.View>
+          </Animated.View>
 
           {/* Center: Notion */}
-          <Animatable.View animation="fadeInUp" duration={600} delay={400} style={styles.colCenter}>
+          <Animated.View entering={FadeInUp.duration(600).delay(400)} style={styles.colCenter}>
             <NotionWidget />
-          </Animatable.View>
+          </Animated.View>
 
           {/* Right: News + SysMonitor */}
-          <Animatable.View animation="slideInRight" duration={600} delay={200} style={styles.colRight}>
+          <Animated.View entering={SlideInRight.duration(600).delay(200)} style={styles.colRight}>
             <View style={styles.rightStack}>
               <View style={styles.newsArea}>
                 <NewsWidget />
@@ -78,9 +78,9 @@ export default function DashboardScreen() {
                 <SysMonitorWidget />
               </View>
             </View>
-          </Animatable.View>
+          </Animated.View>
         </View>
-      </Animatable.View>
+      </Animated.View>
     </View>
   );
 }

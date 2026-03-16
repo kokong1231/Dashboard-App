@@ -1,6 +1,10 @@
-import React from 'react';
-import * as Animatable from 'react-native-animatable';
-import { TextStyle } from 'react-native';
+import React, { useEffect } from 'react';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { COLORS, FONTS } from '@/theme';
 
 interface BlinkCursorProps {
@@ -14,21 +18,27 @@ export default function BlinkCursor({
   size = FONTS.sizes.md,
   char = '_',
 }: BlinkCursorProps) {
-  const style: TextStyle = {
-    fontFamily: FONTS.mono,
-    color,
-    fontSize: size,
-    lineHeight: size * 1.2,
-  };
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    opacity.value = withRepeat(withTiming(0, { duration: 450 }), -1, true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   return (
-    <Animatable.Text
-      animation="flash"
-      iterationCount="infinite"
-      duration={900}
-      useNativeDriver
-      style={style}>
+    <Animated.Text
+      style={[
+        {
+          fontFamily: FONTS.mono,
+          color,
+          fontSize: size,
+          lineHeight: size * 1.2,
+        },
+        animStyle,
+      ]}>
       {char}
-    </Animatable.Text>
+    </Animated.Text>
   );
 }
