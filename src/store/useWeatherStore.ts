@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { fetchWeather } from '@/api/weatherApi';
 import { WeatherData } from '@/types';
 
-const REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
+const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 interface WeatherStore {
   data: WeatherData | null;

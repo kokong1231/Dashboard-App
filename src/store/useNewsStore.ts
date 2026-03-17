@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { fetchAINews } from '@/api/newsApi';
 import { HackerNewsHit } from '@/types';
 
-const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
+const REFRESH_INTERVAL = 2 * 60 * 1000; // 2 minutes
 
 interface NewsStore {
   items: HackerNewsHit[];

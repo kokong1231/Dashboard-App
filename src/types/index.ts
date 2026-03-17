@@ -30,9 +30,18 @@ export interface WeatherHourly {
   precipitation_probability: number[];
 }
 
+export interface WeatherDaily {
+  time: string[];
+  temperature_2m_max: number[];
+  temperature_2m_min: number[];
+  weather_code: number[];
+  precipitation_probability_max: number[];
+}
+
 export interface WeatherData {
   current: WeatherCurrent;
   hourly: WeatherHourly;
+  daily: WeatherDaily;
   location: GeoLocation;
 }
 
@@ -46,6 +55,12 @@ export interface HackerNewsHit {
   num_comments: number;
   created_at: string;
   story_text: string | null;
+  /** Optional thumbnail image URL (Korean RSS items) */
+  thumbnail?: string;
+  /** News source label */
+  source?: string;
+  /** Category tag: AI / 기술 / 연예 / 정치 / 경제 / 사회 / 국제 */
+  category?: string;
 }
 
 // ── Notion blocks ──────────────────────────────────────────────────────────
@@ -72,6 +87,7 @@ export interface NotionBlock {
   bulleted_list_item?: { rich_text: NotionRichText[] };
   numbered_list_item?: { rich_text: NotionRichText[] };
   to_do?: { rich_text: NotionRichText[]; checked: boolean };
+  toggle?: { rich_text: NotionRichText[] };
   code?: { rich_text: NotionRichText[]; language: string };
   quote?: { rich_text: NotionRichText[] };
   callout?: { rich_text: NotionRichText[]; icon?: { type: string; emoji?: string } };
@@ -87,6 +103,18 @@ export interface NotionBlock {
   child_database?: { title: string };
   link_preview?: { url: string };
   embed?: { url: string };
+  /** Table block metadata */
+  table?: {
+    table_width: number;
+    has_column_header: boolean;
+    has_row_header: boolean;
+  };
+  /** Table row cells (each cell is an array of rich-text spans) */
+  table_row?: {
+    cells: NotionRichText[][];
+  };
+  /** Pre-fetched table_row children (populated by fetchPageBlocks) */
+  table_children?: NotionBlock[];
 }
 
 // ── Notion pages ───────────────────────────────────────────────────────────
@@ -115,6 +143,20 @@ export interface NotionPageListItem {
   lastEdited: string;
   emoji?: string;
   databaseId?: string;
+  /** 'workspace' | 'page_id' | 'database_id' | 'block_id' */
+  parentType?: string;
+  /** Parent page ID (when parentType === 'page_id') */
+  parentPageId?: string;
+  /** Extracted database property values for list display */
+  dateStart?: string;
+  dateEnd?: string;
+  status?: string;
+  statusColor?: string;
+  select?: string;
+  selectColor?: string;
+  tags?: string[];
+  checked?: boolean;
+  priority?: string;
 }
 
 export interface NotionDatabaseListItem {

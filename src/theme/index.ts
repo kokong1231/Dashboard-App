@@ -22,12 +22,12 @@ export const COLORS = {
 export const FONTS = {
   mono: Platform.select({ android: 'monospace', ios: 'Courier New', default: 'monospace' }),
   sizes: {
-    xs: 11,
-    sm: 13,
-    md: 15,
-    lg: 18,
-    xl: 25,
-    xxl: 34,
+    xs: 13,
+    sm: 16,
+    md: 19,
+    lg: 23,
+    xl: 31,
+    xxl: 42,
   },
 };
 

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { fetchNotionDatabases, fetchNotionPages } from '@/api/notionApi';
 import { NotionDatabaseListItem, NotionPageListItem } from '@/types';
 
-const REFRESH_INTERVAL = 2 * 60 * 1000; // 2 minutes
+const REFRESH_INTERVAL = 1 * 60 * 1000; // 1 minute
 
 interface NotionStore {
   databases: NotionDatabaseListItem[];

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { GeoLocation, WeatherCurrent, WeatherData, WeatherHourly } from '@/types';
+import { GeoLocation, WeatherCurrent, WeatherData, WeatherDaily, WeatherHourly } from '@/types';
 
 const DEFAULT_LOCATION: GeoLocation = {
   latitude: 37.5665,
@@ -41,7 +41,13 @@ export async function fetchWeather(): Promise<WeatherData> {
       'uv_index',
     ].join(','),
     hourly: 'temperature_2m,precipitation_probability',
-    forecast_days: '1',
+    daily: [
+      'weather_code',
+      'temperature_2m_max',
+      'temperature_2m_min',
+      'precipitation_probability_max',
+    ].join(','),
+    forecast_days: '7',
     wind_speed_unit: 'kmh',
     timezone: 'auto',
   });
@@ -51,6 +57,7 @@ export async function fetchWeather(): Promise<WeatherData> {
   });
 
   const raw = res.data;
+
   const current: WeatherCurrent = {
     temperature_2m: raw.current.temperature_2m,
     apparent_temperature: raw.current.apparent_temperature,
@@ -67,5 +74,13 @@ export async function fetchWeather(): Promise<WeatherData> {
     precipitation_probability: raw.hourly.precipitation_probability,
   };
 
-  return { current, hourly, location };
+  const daily: WeatherDaily = {
+    time: raw.daily.time,
+    temperature_2m_max: raw.daily.temperature_2m_max,
+    temperature_2m_min: raw.daily.temperature_2m_min,
+    weather_code: raw.daily.weather_code,
+    precipitation_probability_max: raw.daily.precipitation_probability_max,
+  };
+
+  return { current, hourly, daily, location };
 }

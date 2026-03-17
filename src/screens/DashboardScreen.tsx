@@ -27,12 +27,12 @@ export default function DashboardScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Background refresh every 60s (stores skip if data is still fresh)
+  // Background refresh every 30s (stores skip if data is still fresh)
   useInterval(() => {
     fetchWeather();
     fetchNews();
     fetchNotion();
-  }, 60000);
+  }, 30000);
 
   return (
     <View style={styles.root}>
@@ -42,13 +42,16 @@ export default function DashboardScreen() {
         backgroundColor="transparent"
         barStyle="light-content"
       />
-      <MatrixBackground />
 
       {/* Scanline overlay */}
       <View style={styles.scanlines} pointerEvents="none" />
 
       <Animated.View entering={FadeIn.duration(800)} style={styles.content}>
-        <HeaderBar />
+        {/* Header with Matrix rain clipped to header area only */}
+        <View style={styles.headerWrapper}>
+          <MatrixBackground containerHeight={48} />
+          <HeaderBar />
+        </View>
 
         <View style={styles.columns}>
           {/* Left: Weather + Calendar */}
@@ -103,6 +106,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: SPACING.xs,
     gap: SPACING.xs,
+  },
+  headerWrapper: {
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0, 255, 65, 0.03)',
   },
   colLeft: { flex: 22 },
   colCenter: { flex: 38 },

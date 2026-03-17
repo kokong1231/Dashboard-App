@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
@@ -20,6 +21,27 @@ import { useInterval } from '@/hooks/useInterval';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
+// Category color map
+const CAT_COLORS: Record<string, string> = {
+  'AI':   COLORS.cyan,
+  '기술': COLORS.greenBright,
+  '연예': '#ff69b4',
+  '정치': COLORS.amber,
+  '경제': '#ffd700',
+  '사회': '#ff6b35',
+  '국제': COLORS.greenDim,
+};
+
+function CategoryBadge({ cat }: { cat?: string }) {
+  if (!cat) return null;
+  const color = CAT_COLORS[cat] ?? COLORS.greenDim;
+  return (
+    <View style={[styles.catBadge, { borderColor: color }]}>
+      <Text style={[styles.catText, { color }]}>{cat}</Text>
+    </View>
+  );
+}
+
 export default function NewsWidget() {
   const nav = useNavigation<NavProp>();
   const { items, isLoading, error, fetch, lastFetched } = useNewsStore();
@@ -32,19 +54,18 @@ export default function NewsWidget() {
     fetch();
   }, [fetch]);
 
-  // Auto-scroll every 4 seconds
+  // Auto-scroll every 5 seconds
   useInterval(() => {
     if (!autoScroll || userScrolling.current || items.length === 0) return;
-    scrollYRef.current += 72;
+    scrollYRef.current += 88;
     scrollRef.current?.scrollTo({ y: scrollYRef.current, animated: true });
-  }, 4000);
+  }, 5000);
 
   const handleScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.nativeEvent.contentOffset.y;
     const contentH = e.nativeEvent.contentSize.height;
     const layoutH = e.nativeEvent.layoutMeasurement.height;
     if (y + layoutH >= contentH - 10) {
-      // Reached bottom - reset
       scrollYRef.current = 0;
       scrollRef.current?.scrollTo({ y: 0, animated: false });
     } else {
@@ -93,16 +114,42 @@ export default function NewsWidget() {
             onPress={() => openUrl(item.url, item.objectID, item.title)}
             activeOpacity={0.7}>
             <View style={styles.itemContainer}>
-              <View style={styles.itemHeader}>
-                <Text style={styles.idx}>{String(idx + 1).padStart(2, '0')}.</Text>
-                <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-              </View>
-              <View style={styles.meta}>
-                <Text style={styles.metaText}>{`▲ ${item.points}`}</Text>
-                <Text style={styles.metaSep}> · </Text>
-                <Text style={styles.metaText}>{formatRelativeTime(item.created_at)}</Text>
-                <Text style={styles.metaSep}> · </Text>
-                <Text style={styles.metaText}>{`${item.num_comments} CMT`}</Text>
+              <View style={styles.itemRow}>
+                {/* Thumbnail */}
+                {item.thumbnail ? (
+                  <Image
+                    source={{ uri: item.thumbnail }}
+                    style={styles.thumbnail}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.thumbnailPlaceholder}>
+                    <Text style={styles.thumbIdx}>{String(idx + 1).padStart(2, '0')}</Text>
+                  </View>
+                )}
+
+                <View style={styles.itemContent}>
+                  {/* Category + meta row */}
+                  <View style={styles.metaTop}>
+                    <CategoryBadge cat={item.category} />
+                    {item.source && item.source !== 'HN' && (
+                      <Text style={styles.sourceText}>{item.source}</Text>
+                    )}
+                    <Text style={styles.metaTime}>{formatRelativeTime(item.created_at)}</Text>
+                  </View>
+
+                  {/* Title */}
+                  <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+
+                  {/* Points & comments (HN only) */}
+                  {item.points > 0 && (
+                    <View style={styles.metaBottom}>
+                      <Text style={styles.metaText}>{`▲ ${item.points}`}</Text>
+                      <Text style={styles.metaSep}> · </Text>
+                      <Text style={styles.metaText}>{`${item.num_comments} CMT`}</Text>
+                    </View>
+                  )}
+                </View>
               </View>
               <View style={styles.divider} />
             </View>
@@ -120,38 +167,92 @@ const styles = StyleSheet.create({
   box: { flex: 1 },
   loading: { fontFamily: FONTS.mono, color: COLORS.amber, fontSize: FONTS.sizes.sm },
   error: { fontFamily: FONTS.mono, color: COLORS.red, fontSize: FONTS.sizes.sm },
+
   itemContainer: { marginBottom: 2 },
-  itemHeader: { flexDirection: 'row', alignItems: 'flex-start' },
-  idx: {
+  itemRow: { flexDirection: 'row', alignItems: 'flex-start' },
+
+  thumbnail: {
+    width: 52,
+    height: 52,
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: COLORS.greenFaint,
+    marginRight: SPACING.xs,
+    flexShrink: 0,
+  },
+  thumbnailPlaceholder: {
+    width: 52,
+    height: 52,
+    borderWidth: 1,
+    borderColor: COLORS.greenFaint,
+    marginRight: SPACING.xs,
+    flexShrink: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,255,65,0.04)',
+  },
+  thumbIdx: {
+    fontFamily: FONTS.mono,
+    color: COLORS.greenFaint,
+    fontSize: FONTS.sizes.xs,
+  },
+
+  itemContent: { flex: 1 },
+
+  metaTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 3,
+    gap: 4,
+  },
+  catBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 2,
+  },
+  catText: {
+    fontFamily: FONTS.mono,
+    fontSize: 10,
+    letterSpacing: 0.5,
+  },
+  sourceText: {
+    fontFamily: FONTS.mono,
+    color: COLORS.greenFaint,
+    fontSize: 10,
+    flex: 1,
+  },
+  metaTime: {
     fontFamily: FONTS.mono,
     color: COLORS.greenDim,
-    fontSize: FONTS.sizes.xs,
-    width: 22,
-    marginTop: 2,
+    fontSize: 10,
+    marginLeft: 'auto',
   },
+
   title: {
     fontFamily: FONTS.mono,
     color: COLORS.green,
     fontSize: FONTS.sizes.xs,
-    flex: 1,
-    lineHeight: 16,
+    lineHeight: 18,
+    marginBottom: 2,
   },
-  meta: {
+
+  metaBottom: {
     flexDirection: 'row',
-    marginLeft: 22,
     marginTop: 2,
   },
   metaText: {
     fontFamily: FONTS.mono,
     color: COLORS.greenDim,
-    fontSize: 11,
+    fontSize: 10,
     letterSpacing: 0.5,
   },
   metaSep: {
     fontFamily: FONTS.mono,
     color: COLORS.greenFaint,
-    fontSize: 11,
+    fontSize: 10,
   },
+
   divider: {
     height: 1,
     backgroundColor: COLORS.greenFaint,

@@ -2,9 +2,6 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useBatteryLevel, usePowerState } from 'react-native-device-info';
 import { useClock } from '@/hooks/useClock';
-import { useWeatherStore } from '@/store/useWeatherStore';
-import { useNewsStore } from '@/store/useNewsStore';
-import { useNotionStore } from '@/store/useNotionStore';
 import BlinkCursor from './BlinkCursor';
 import { COLORS, FONTS, SPACING } from '@/theme';
 
@@ -38,14 +35,6 @@ function BatteryIndicator() {
 
 export default function HeaderBar() {
   const { timeString, dateString, dayString } = useClock();
-  const weatherLoading = useWeatherStore(s => s.isLoading);
-  const newsLoading = useNewsStore(s => s.isLoading);
-  const notionLoading = useNotionStore(s => s.isLoading);
-  const notionConnected = useNotionStore(s => s.lastFetched !== null || s.isLoading);
-
-  const dot = (active: boolean, loading: boolean) => ({
-    color: loading ? COLORS.amber : active ? COLORS.greenBright : COLORS.greenDim,
-  });
 
   return (
     <View style={styles.container}>
@@ -54,16 +43,6 @@ export default function HeaderBar() {
         <Text style={styles.prefix}>&gt;&gt; </Text>
         <Text style={styles.title}>OHS_DASHBOARD</Text>
         <Text style={styles.version}> v1.0</Text>
-      </View>
-
-      {/* Center: status indicators */}
-      <View style={styles.sectionCenter}>
-        <Text style={[styles.dot, dot(true, weatherLoading)]}>●</Text>
-        <Text style={styles.label}> WX </Text>
-        <Text style={[styles.dot, dot(notionConnected, notionLoading)]}>●</Text>
-        <Text style={styles.label}> NTN </Text>
-        <Text style={[styles.dot, dot(true, newsLoading)]}>●</Text>
-        <Text style={styles.label}> NEWS </Text>
       </View>
 
       {/* Right: datetime + battery */}
@@ -94,12 +73,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
   },
-  sectionCenter: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   sectionRight: {
     flex: 1,
     flexDirection: 'row',
@@ -119,15 +92,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   version: {
-    fontFamily: FONTS.mono,
-    fontSize: FONTS.sizes.xs,
-    color: COLORS.greenDim,
-    letterSpacing: 1,
-  },
-  dot: {
-    fontSize: FONTS.sizes.sm,
-  },
-  label: {
     fontFamily: FONTS.mono,
     fontSize: FONTS.sizes.xs,
     color: COLORS.greenDim,
