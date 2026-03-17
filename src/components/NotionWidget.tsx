@@ -366,17 +366,16 @@ function buildPageTree(pages: NotionPageListItem[]): PageTreeItem[] {
   });
 
   // Root = workspace-level or parent not in our list
+  // Keep API return order (matches Notion's natural order) — no extra sort
   const roots = nonDb.filter(
     p => p.parentType === 'workspace' || !p.parentPageId || !allIds.has(p.parentPageId),
   );
-  roots.sort((a, b) => new Date(b.lastEdited).getTime() - new Date(a.lastEdited).getTime());
 
   const result: PageTreeItem[] = [];
 
   function dfs(p: NotionPageListItem, depth: number) {
-    const children = (childMap.get(p.id) ?? []).sort(
-      (a, b) => new Date(b.lastEdited).getTime() - new Date(a.lastEdited).getTime(),
-    );
+    // Keep children in API return order as well
+    const children = childMap.get(p.id) ?? [];
     result.push({ page: p, depth, hasChildren: children.length > 0 });
     children.forEach(c => dfs(c, depth + 1));
   }

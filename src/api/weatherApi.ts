@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { PermissionsAndroid, Platform } from 'react-native';
+import Geolocation from 'react-native-geolocation-service';
 import { GeoLocation, WeatherCurrent, WeatherData, WeatherDaily, WeatherHourly } from '@/types';
 
 const DEFAULT_LOCATION: GeoLocation = {
@@ -9,19 +11,93 @@ const DEFAULT_LOCATION: GeoLocation = {
   timezone: 'Asia/Seoul',
 };
 
+async function requestLocationPermission(): Promise<boolean> {
+  if (Platform.OS !== 'android') return true;
+  try {
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    );
+    return granted === PermissionsAndroid.RESULTS.GRANTED;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchLocationByGPS(): Promise<GeoLocation> {
+  const hasPermission = await requestLocationPermission();
+  if (!hasPermission) throw new Error('Location permission denied');
+
+  return new Promise((resolve, reject) => {
+    Geolocation.getCurrentPosition(
+      async position => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const res = await axios.get(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&zoom=10`,
+            {
+              timeout: 8000,
+              headers: {
+                'User-Agent': 'OhsDashboard/1.0',
+                'Accept-Language': 'ko,en',
+              },
+            },
+          );
+          const addr = res.data.address;
+          const raw =
+            addr.city ??
+            addr.town ??
+            addr.village ??
+            addr.city_district ??
+            addr.borough ??
+            addr.suburb ??
+            addr.municipality ??
+            addr.state ??
+            addr.county;
+          if (raw) {
+            const country = ((addr.country_code as string) ?? '??').toUpperCase();
+            resolve({ latitude, longitude, city: raw as string, country, timezone: 'auto' });
+          } else {
+            // Nominatim returned no recognisable field — fall back to IP for city name
+            const ip = await fetchLocationByIP();
+            resolve({ latitude, longitude, city: ip.city, country: ip.country, timezone: 'auto' });
+          }
+        } catch {
+          // Nominatim request failed — use GPS coords but get city name via IP
+          try {
+            const ip = await fetchLocationByIP();
+            resolve({ latitude, longitude, city: ip.city, country: ip.country, timezone: 'auto' });
+          } catch {
+            resolve({ latitude, longitude, city: DEFAULT_LOCATION.city, country: DEFAULT_LOCATION.country, timezone: 'auto' });
+          }
+        }
+      },
+      error => reject(error),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  });
+}
+
+async function fetchLocationByIP(): Promise<GeoLocation> {
+  const res = await axios.get('https://ipapi.co/json/', { timeout: 5000 });
+  const d = res.data;
+  return {
+    latitude: d.latitude,
+    longitude: d.longitude,
+    city: (d.city as string)?.toUpperCase() ?? 'UNKNOWN',
+    country: (d.country_code as string)?.toUpperCase() ?? '??',
+    timezone: d.timezone ?? 'UTC',
+  };
+}
+
 async function fetchLocation(): Promise<GeoLocation> {
   try {
-    const res = await axios.get('https://ipapi.co/json/', { timeout: 5000 });
-    const d = res.data;
-    return {
-      latitude: d.latitude,
-      longitude: d.longitude,
-      city: (d.city as string)?.toUpperCase() ?? 'UNKNOWN',
-      country: (d.country_code as string)?.toUpperCase() ?? '??',
-      timezone: d.timezone ?? 'UTC',
-    };
+    return await fetchLocationByGPS();
   } catch {
-    return DEFAULT_LOCATION;
+    try {
+      return await fetchLocationByIP();
+    } catch {
+      return DEFAULT_LOCATION;
+    }
   }
 }
 
@@ -82,5 +158,11 @@ export async function fetchWeather(): Promise<WeatherData> {
     precipitation_probability_max: raw.daily.precipitation_probability_max,
   };
 
-  return { current, hourly, daily, location };
+  // If timezone was 'auto', update from Open-Meteo response
+  const resolvedLocation: GeoLocation = {
+    ...location,
+    timezone: raw.timezone ?? location.timezone,
+  };
+
+  return { current, hourly, daily, location: resolvedLocation };
 }

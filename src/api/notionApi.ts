@@ -89,12 +89,20 @@ function extractDbProps(properties: Record<string, unknown>): Partial<NotionPage
 // ── Search endpoints ──────────────────────────────────────────────────────────
 
 export async function fetchNotionDatabases(): Promise<NotionDatabaseListItem[]> {
-  const res = await notionClient.post('/search', {
-    filter: { value: 'database', property: 'object' },
-    page_size: 20,
-  });
+  const results: Record<string, unknown>[] = [];
+  let cursor: string | undefined;
 
-  return (res.data.results as Record<string, unknown>[]).map(db => {
+  do {
+    const res = await notionClient.post('/search', {
+      filter: { value: 'database', property: 'object' },
+      page_size: 100,
+      ...(cursor ? { start_cursor: cursor } : {}),
+    });
+    results.push(...(res.data.results as Record<string, unknown>[]));
+    cursor = res.data.has_more ? (res.data.next_cursor as string) : undefined;
+  } while (cursor);
+
+  return results.map(db => {
     const titleArr = db.title as Array<{ plain_text: string }>;
     const title =
       Array.isArray(titleArr) && titleArr.length > 0
@@ -110,29 +118,34 @@ export async function fetchNotionDatabases(): Promise<NotionDatabaseListItem[]> 
 }
 
 export async function fetchNotionPages(): Promise<NotionPageListItem[]> {
-  const res = await notionClient.post('/search', {
-    filter: { value: 'page', property: 'object' },
-    sort: { direction: 'descending', timestamp: 'last_edited_time' },
-    page_size: 50,
-  });
+  const results: Record<string, unknown>[] = [];
+  let cursor: string | undefined;
 
-  return (res.data.results as Record<string, unknown>[])
-    .map(page => {
-      const props  = page.properties as Record<string, unknown>;
-      const parent = page.parent as Record<string, unknown> | undefined;
-      const parentType = parent?.type as string ?? 'workspace';
-      return {
-        id:           page.id as string,
-        url:          page.url as string,
-        title:        extractTitle(props),
-        lastEdited:   page.last_edited_time as string,
-        emoji:        extractEmoji(page.icon),
-        databaseId:   parent?.database_id as string | undefined,
-        parentType,
-        parentPageId: parent?.page_id as string | undefined,
-      };
-    })
-    .filter(p => p.title !== '(UNTITLED)' || p.emoji);
+  do {
+    const res = await notionClient.post('/search', {
+      filter: { value: 'page', property: 'object' },
+      page_size: 100,
+      ...(cursor ? { start_cursor: cursor } : {}),
+    });
+    results.push(...(res.data.results as Record<string, unknown>[]));
+    cursor = res.data.has_more ? (res.data.next_cursor as string) : undefined;
+  } while (cursor);
+
+  return results.map(page => {
+    const props  = page.properties as Record<string, unknown>;
+    const parent = page.parent as Record<string, unknown> | undefined;
+    const parentType = parent?.type as string ?? 'workspace';
+    return {
+      id:           page.id as string,
+      url:          page.url as string,
+      title:        extractTitle(props),
+      lastEdited:   page.last_edited_time as string,
+      emoji:        extractEmoji(page.icon),
+      databaseId:   parent?.database_id as string | undefined,
+      parentType,
+      parentPageId: parent?.page_id as string | undefined,
+    };
+  });
 }
 
 // ── Database query ────────────────────────────────────────────────────────────
