@@ -28,10 +28,7 @@ export const useNotionStore = create<NotionStore>((set, get) => ({
 
     set({ isLoading: true, error: null });
     try {
-      const [databases, pages] = await Promise.all([
-        fetchNotionDatabases(),
-        fetchNotionPages(),
-      ]);
+      const [databases, pages] = await Promise.all([fetchNotionDatabases(), fetchNotionPages()]);
       set({ databases, pages, isLoading: false, lastFetched: Date.now() });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'FETCH ERROR';

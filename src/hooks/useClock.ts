@@ -4,7 +4,7 @@ import { useInterval } from './useInterval';
 interface ClockState {
   timeString: string; // "23:41:07"
   dateString: string; // "2026.03.16"
-  dayString: string;  // "MON"
+  dayString: string; // "MON"
 }
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];

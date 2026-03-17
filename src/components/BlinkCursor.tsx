@@ -22,7 +22,7 @@ export default function BlinkCursor({
 
   useEffect(() => {
     opacity.value = withRepeat(withTiming(0, { duration: 450 }), -1, true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
@@ -37,7 +37,8 @@ export default function BlinkCursor({
           lineHeight: size * 1.2,
         },
         animStyle,
-      ]}>
+      ]}
+    >
       {char}
     </Animated.Text>
   );

@@ -1,11 +1,6 @@
 import { NOTION_API_KEY } from '@env';
 import { notionClient } from './client';
-import {
-  NotionBlock,
-  NotionDatabaseListItem,
-  NotionPageListItem,
-  NotionRichText,
-} from '@/types';
+import { NotionBlock, NotionDatabaseListItem, NotionPageListItem, NotionRichText } from '@/types';
 
 notionClient.defaults.headers.common['Authorization'] = `${NOTION_API_KEY}`;
 
@@ -47,26 +42,35 @@ function extractDbProps(properties: Record<string, unknown>): Partial<NotionPage
     switch (prop.type) {
       case 'date': {
         const d = prop.date as Record<string, string> | null;
-        if (d?.start) { dateStart = d.start; dateEnd = d.end ?? undefined; }
+        if (d?.start) {
+          dateStart = d.start;
+          dateEnd = d.end ?? undefined;
+        }
         break;
       }
       case 'status': {
         const s = prop.status as Record<string, string> | null;
-        if (s?.name) { status = s.name; statusColor = s.color; }
+        if (s?.name) {
+          status = s.name;
+          statusColor = s.color;
+        }
         break;
       }
       case 'select': {
         const s = prop.select as Record<string, string> | null;
         if (s?.name) {
           // Treat a property named "Priority" specially
-          const key = Object.keys(properties).find(k =>
-            (properties[k] as Record<string, unknown>)?.type === 'select' &&
-            ((properties[k] as Record<string, unknown>)?.select as Record<string, string>)?.name === s.name
+          const key = Object.keys(properties).find(
+            k =>
+              (properties[k] as Record<string, unknown>)?.type === 'select' &&
+              ((properties[k] as Record<string, unknown>)?.select as Record<string, string>)
+                ?.name === s.name,
           );
           if (key?.toLowerCase().includes('priority')) {
             priority = s.name;
           } else {
-            select = s.name; selectColor = s.color;
+            select = s.name;
+            selectColor = s.color;
           }
         }
         break;
@@ -83,7 +87,17 @@ function extractDbProps(properties: Record<string, unknown>): Partial<NotionPage
     }
   }
 
-  return { dateStart, dateEnd, status, statusColor, select, selectColor, tags: tags.length ? tags : undefined, checked, priority };
+  return {
+    dateStart,
+    dateEnd,
+    status,
+    statusColor,
+    select,
+    selectColor,
+    tags: tags.length ? tags : undefined,
+    checked,
+    priority,
+  };
 }
 
 // ── Search endpoints ──────────────────────────────────────────────────────────
@@ -118,16 +132,16 @@ export async function fetchNotionPages(): Promise<NotionPageListItem[]> {
 
   return (res.data.results as Record<string, unknown>[])
     .map(page => {
-      const props  = page.properties as Record<string, unknown>;
+      const props = page.properties as Record<string, unknown>;
       const parent = page.parent as Record<string, unknown> | undefined;
-      const parentType = parent?.type as string ?? 'workspace';
+      const parentType = (parent?.type as string) ?? 'workspace';
       return {
-        id:           page.id as string,
-        url:          page.url as string,
-        title:        extractTitle(props),
-        lastEdited:   page.last_edited_time as string,
-        emoji:        extractEmoji(page.icon),
-        databaseId:   parent?.database_id as string | undefined,
+        id: page.id as string,
+        url: page.url as string,
+        title: extractTitle(props),
+        lastEdited: page.last_edited_time as string,
+        emoji: extractEmoji(page.icon),
+        databaseId: parent?.database_id as string | undefined,
         parentType,
         parentPageId: parent?.page_id as string | undefined,
       };
@@ -146,11 +160,11 @@ export async function queryDatabasePages(databaseId: string): Promise<NotionPage
   return (res.data.results as Record<string, unknown>[]).map(page => {
     const props = page.properties as Record<string, unknown>;
     return {
-      id:         page.id as string,
-      url:        page.url as string,
-      title:      extractTitle(props),
+      id: page.id as string,
+      url: page.url as string,
+      title: extractTitle(props),
       lastEdited: page.last_edited_time as string,
-      emoji:      extractEmoji(page.icon),
+      emoji: extractEmoji(page.icon),
       databaseId,
       parentType: 'database_id',
       ...extractDbProps(props),

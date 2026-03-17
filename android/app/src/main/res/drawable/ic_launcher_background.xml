@@ -4,14 +4,13 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Pure black background -->
+    <!-- Deep dark purple-tinted background -->
     <path
-        android:fillColor="#000000"
+        android:fillColor="#080B14"
         android:pathData="M0,0 H108 V108 H0 Z"/>
-    <!-- Subtle grid lines (matrix feel) -->
+    <!-- Subtle radial glow in center -->
     <path
-        android:pathData="M0,27 H108 M0,54 H108 M0,81 H108 M27,0 V108 M54,0 V108 M81,0 V108"
-        android:strokeColor="#00ff41"
-        android:strokeWidth="0.3"
-        android:strokeAlpha="0.15"/>
+        android:fillColor="#7B2FBE"
+        android:fillAlpha="0.08"
+        android:pathData="M54,54 m-40,0 a40,40 0 1,0 80,0 a40,40 0 1,0 -80,0"/>
 </vector>

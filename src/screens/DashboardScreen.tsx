@@ -4,7 +4,6 @@ import Animated, { FadeIn, FadeInUp, SlideInLeft, SlideInRight } from 'react-nat
 import { useWeatherStore } from '@/store/useWeatherStore';
 import { useNewsStore } from '@/store/useNewsStore';
 import { useNotionStore } from '@/store/useNotionStore';
-import MatrixBackground from '@/components/MatrixBackground';
 import HeaderBar from '@/components/HeaderBar';
 import WeatherWidget from '@/components/WeatherWidget';
 import CalendarWidget from '@/components/CalendarWidget';
@@ -19,15 +18,13 @@ export default function DashboardScreen() {
   const fetchNews = useNewsStore(s => s.fetch);
   const fetchNotion = useNotionStore(s => s.fetch);
 
-  // Initial fetch
   useEffect(() => {
     fetchWeather();
     fetchNews();
     fetchNotion();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Background refresh every 30s (stores skip if data is still fresh)
   useInterval(() => {
     fetchWeather();
     fetchNews();
@@ -36,26 +33,14 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar
-        hidden
-        translucent
-        backgroundColor="transparent"
-        barStyle="light-content"
-      />
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-      {/* Scanline overlay */}
-      <View style={styles.scanlines} pointerEvents="none" />
-
-      <Animated.View entering={FadeIn.duration(800)} style={styles.content}>
-        {/* Header with Matrix rain clipped to header area only */}
-        <View style={styles.headerWrapper}>
-          <MatrixBackground containerHeight={48} />
-          <HeaderBar />
-        </View>
+      <Animated.View entering={FadeIn.duration(600)} style={styles.content}>
+        <HeaderBar />
 
         <View style={styles.columns}>
           {/* Left: Weather + Calendar */}
-          <Animated.View entering={SlideInLeft.duration(600).delay(200)} style={styles.colLeft}>
+          <Animated.View entering={SlideInLeft.duration(500).delay(150)} style={styles.colLeft}>
             <View style={styles.leftStack}>
               <View style={styles.weatherArea}>
                 <WeatherWidget />
@@ -67,12 +52,12 @@ export default function DashboardScreen() {
           </Animated.View>
 
           {/* Center: Notion */}
-          <Animated.View entering={FadeInUp.duration(600).delay(400)} style={styles.colCenter}>
+          <Animated.View entering={FadeInUp.duration(500).delay(300)} style={styles.colCenter}>
             <NotionWidget />
           </Animated.View>
 
           {/* Right: News + SysMonitor */}
-          <Animated.View entering={SlideInRight.duration(600).delay(200)} style={styles.colRight}>
+          <Animated.View entering={SlideInRight.duration(500).delay(150)} style={styles.colRight}>
             <View style={styles.rightStack}>
               <View style={styles.newsArea}>
                 <NewsWidget />
@@ -92,11 +77,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: COLORS.background,
-  },
-  scanlines: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'transparent',
-    opacity: 0.04,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0,
   },
   content: {
     flex: 1,
@@ -104,24 +85,18 @@ const styles = StyleSheet.create({
   columns: {
     flex: 1,
     flexDirection: 'row',
-    padding: SPACING.xs,
-    gap: SPACING.xs,
-  },
-  headerWrapper: {
-    overflow: 'hidden',
-    backgroundColor: 'rgba(0, 255, 65, 0.03)',
+    padding: SPACING.sm,
+    gap: SPACING.sm,
   },
   colLeft: { flex: 22 },
   colCenter: { flex: 38 },
   colRight: { flex: 28 },
 
-  // Left column stack
-  leftStack: { flex: 1, gap: SPACING.xs },
+  leftStack: { flex: 1, gap: SPACING.sm },
   weatherArea: { flex: 6 },
   calendarArea: { flex: 4 },
 
-  // Right column stack
-  rightStack: { flex: 1, gap: SPACING.xs },
+  rightStack: { flex: 1, gap: SPACING.sm },
   newsArea: { flex: 6 },
   sysArea: { flex: 4 },
 });

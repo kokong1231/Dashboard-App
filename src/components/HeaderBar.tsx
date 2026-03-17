@@ -2,11 +2,10 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useBatteryLevel, usePowerState } from 'react-native-device-info';
 import { useClock } from '@/hooks/useClock';
-import BlinkCursor from './BlinkCursor';
-import { COLORS, FONTS, SPACING } from '@/theme';
+import { COLORS, FONTS, RADIUS, SHADOWS, SPACING } from '@/theme';
 
 function BatteryIndicator() {
-  const level = useBatteryLevel(); // 0.0 – 1.0, or -1 if unknown
+  const level = useBatteryLevel();
   const powerState = usePowerState();
 
   if (level == null || level < 0) return null;
@@ -14,21 +13,27 @@ function BatteryIndicator() {
   const pct = Math.round((level as number) * 100);
   const isCharging = powerState.batteryState === 'charging' || powerState.batteryState === 'full';
 
-  // 4-block bar
-  const filled = Math.round((pct / 100) * 4);
-  const bar = '█'.repeat(filled) + '░'.repeat(4 - filled);
-
-  const color =
-    pct >= 60 ? COLORS.green :
-    pct >= 25 ? COLORS.amber :
-    COLORS.red;
+  const battColor = pct >= 60 ? COLORS.success : pct >= 25 ? COLORS.warning : COLORS.error;
 
   return (
     <View style={styles.battery}>
-      <Text style={[styles.batteryBar, { color }]}>{bar}</Text>
-      <Text style={[styles.batteryPct, { color }]}>
-        {isCharging ? '⚡' : ''}{pct}%
-      </Text>
+      <Text style={styles.battIcon}>{isCharging ? '⚡' : '🔋'}</Text>
+      <View style={styles.battBarWrap}>
+        <View
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          style={[styles.battBarFill, { width: `${pct}%` as any, backgroundColor: battColor }]}
+        />
+      </View>
+      <Text style={[styles.battPct, { color: battColor }]}>{pct}%</Text>
+    </View>
+  );
+}
+
+// Flower logo — 5-petal cherry blossom in purple
+function FlowerLogo() {
+  return (
+    <View style={styles.flowerWrap}>
+      <Text style={styles.flowerIcon}>✿</Text>
     </View>
   );
 }
@@ -38,21 +43,25 @@ export default function HeaderBar() {
 
   return (
     <View style={styles.container}>
-      {/* Left: title */}
+      {/* Left: logo + title */}
       <View style={styles.section}>
-        <Text style={styles.prefix}>&gt;&gt; </Text>
-        <Text style={styles.title}>OHS_DASHBOARD</Text>
-        <Text style={styles.version}> v1.0</Text>
+        <FlowerLogo />
+        <View style={styles.titleWrap}>
+          <Text style={styles.title}>JIN Dashboard</Text>
+          <Text style={styles.subtitle}>Personal Space</Text>
+        </View>
       </View>
 
-      {/* Right: datetime + battery */}
+      {/* Right: battery + datetime */}
       <View style={styles.sectionRight}>
         <BatteryIndicator />
-        <View style={styles.separator} />
-        <Text style={styles.datetime}>{dayString} {dateString}</Text>
-        <Text style={styles.timeSep}>  </Text>
-        <Text style={styles.time}>{timeString}</Text>
-        <BlinkCursor char="_" size={FONTS.sizes.sm} />
+        <View style={styles.sep} />
+        <View style={styles.datetimeWrap}>
+          <Text style={styles.time}>{timeString}</Text>
+          <Text style={styles.date}>
+            {dayString}, {dateString}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -60,79 +69,103 @@ export default function HeaderBar() {
 
 const styles = StyleSheet.create({
   container: {
-    height: 42,
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: COLORS.surfaceElevated,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    paddingHorizontal: SPACING.md,
-    backgroundColor: 'rgba(0, 255, 65, 0.03)',
+    ...SHADOWS.header,
   },
   section: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  flowerWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.primarySurface,
+    borderWidth: 1.5,
+    borderColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flowerIcon: {
+    fontSize: 20,
+    color: COLORS.primaryLighter,
+  },
+  titleWrap: {
+    gap: 1,
+  },
+  title: {
+    fontFamily: FONTS.sansMedium,
+    fontSize: FONTS.sizes.md,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  subtitle: {
+    fontFamily: FONTS.sans,
+    fontSize: 11,
+    color: COLORS.accent,
+    letterSpacing: 0.3,
+    opacity: 0.8,
   },
   sectionRight: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-  },
-  prefix: {
-    fontFamily: FONTS.mono,
-    fontSize: FONTS.sizes.sm,
-    color: COLORS.greenDim,
-  },
-  title: {
-    fontFamily: FONTS.mono,
-    fontSize: FONTS.sizes.md,
-    color: COLORS.greenBright,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  version: {
-    fontFamily: FONTS.mono,
-    fontSize: FONTS.sizes.xs,
-    color: COLORS.greenDim,
-    letterSpacing: 1,
-  },
-  datetime: {
-    fontFamily: FONTS.mono,
-    fontSize: FONTS.sizes.sm,
-    color: COLORS.greenDim,
-    letterSpacing: 1,
-  },
-  timeSep: {
-    fontFamily: FONTS.mono,
-    fontSize: FONTS.sizes.sm,
-    color: COLORS.greenDim,
-  },
-  time: {
-    fontFamily: FONTS.mono,
-    fontSize: FONTS.sizes.sm,
-    color: COLORS.green,
-    letterSpacing: 2,
+    gap: SPACING.md,
   },
   battery: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 5,
   },
-  batteryBar: {
-    fontFamily: FONTS.mono,
-    fontSize: FONTS.sizes.xs,
-    letterSpacing: -1,
+  battIcon: {
+    fontSize: 14,
   },
-  batteryPct: {
-    fontFamily: FONTS.mono,
-    fontSize: FONTS.sizes.xs,
-    letterSpacing: 0.5,
+  battBarWrap: {
+    width: 36,
+    height: 7,
+    backgroundColor: COLORS.border,
+    borderRadius: RADIUS.full,
+    overflow: 'hidden',
   },
-  separator: {
+  battBarFill: {
+    height: '100%',
+    borderRadius: RADIUS.full,
+  },
+  battPct: {
+    fontFamily: FONTS.sans,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sep: {
     width: 1,
-    height: 14,
-    backgroundColor: COLORS.greenFaint,
-    marginHorizontal: SPACING.sm,
+    height: 24,
+    backgroundColor: COLORS.border,
+  },
+  datetimeWrap: {
+    alignItems: 'flex-end',
+    gap: 1,
+  },
+  time: {
+    fontFamily: FONTS.sansMedium,
+    fontSize: FONTS.sizes.md,
+    color: COLORS.textPrimary,
+    fontWeight: '600',
+    letterSpacing: 1,
+  },
+  date: {
+    fontFamily: FONTS.sans,
+    fontSize: 12,
+    color: COLORS.textHint,
+    letterSpacing: 0.3,
   },
 });

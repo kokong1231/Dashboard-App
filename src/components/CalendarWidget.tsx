@@ -1,12 +1,22 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import GlowBox from './GlowBox';
-import { COLORS, FONTS, SPACING } from '@/theme';
+import { COLORS, FONTS, RADIUS, SPACING } from '@/theme';
 
-const DAY_LABELS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTH_NAMES = [
-  'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
-  'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
 function getDaysInMonth(year: number, month: number): number {
@@ -27,8 +37,7 @@ export default function CalendarWidget() {
   const { year, month } = viewDate;
   const daysInMonth = getDaysInMonth(year, month);
   const firstDow = getFirstDayOfWeek(year, month);
-  const isCurrentMonth =
-    year === today.getFullYear() && month === today.getMonth();
+  const isCurrentMonth = year === today.getFullYear() && month === today.getMonth();
 
   const prevMonth = () => {
     setViewDate(prev =>
@@ -45,7 +54,6 @@ export default function CalendarWidget() {
     );
   };
 
-  // Build cell grid
   const cells: (number | null)[] = [
     ...Array(firstDow).fill(null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
@@ -59,29 +67,24 @@ export default function CalendarWidget() {
 
   return (
     <GlowBox style={styles.box} noPadding>
-      {/* Header: month nav */}
+      {/* Month nav */}
       <View style={styles.monthNav}>
-        <TouchableOpacity onPress={prevMonth} style={styles.navBtn}>
-          <Text style={styles.navArrow}>{'‹'}</Text>
+        <TouchableOpacity onPress={prevMonth} style={styles.navBtn} activeOpacity={0.7}>
+          <Text style={styles.navArrow}>‹</Text>
         </TouchableOpacity>
         <View style={styles.monthTitleWrap}>
           <Text style={styles.monthLabel}>{MONTH_NAMES[month]}</Text>
           <Text style={styles.yearLabel}>{String(year)}</Text>
         </View>
-        <TouchableOpacity onPress={nextMonth} style={styles.navBtn}>
-          <Text style={styles.navArrow}>{'›'}</Text>
+        <TouchableOpacity onPress={nextMonth} style={styles.navBtn} activeOpacity={0.7}>
+          <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
       </View>
 
       {/* Day-of-week headers */}
       <View style={styles.dowRow}>
         {DAY_LABELS.map((d, i) => (
-          <Text
-            key={d}
-            style={[
-              styles.dowLabel,
-              (i === 0 || i === 6) && styles.dowWeekend,
-            ]}>
+          <Text key={i} style={[styles.dowLabel, (i === 0 || i === 6) && styles.dowWeekend]}>
             {d}
           </Text>
         ))}
@@ -89,25 +92,23 @@ export default function CalendarWidget() {
 
       <View style={styles.headerDivider} />
 
-      {/* Calendar grid — flex: 1 rows fill remaining space */}
+      {/* Calendar grid */}
       <View style={styles.grid}>
         {rows.map((row, ri) => (
           <View key={ri} style={styles.weekRow}>
             {row.map((day, di) => {
               const isToday = isCurrentMonth && day === today.getDate();
               const isWeekend = di === 0 || di === 6;
-              const isEmpty = !day;
               return (
-                <View
-                  key={di}
-                  style={[styles.cell, isToday && styles.todayCell]}>
-                  {!isEmpty && (
+                <View key={di} style={[styles.cell, isToday && styles.todayCell]}>
+                  {day != null && (
                     <Text
                       style={[
                         styles.dayNum,
                         isToday && styles.todayNum,
                         isWeekend && !isToday && styles.weekendNum,
-                      ]}>
+                      ]}
+                    >
                       {String(day)}
                     </Text>
                   )}
@@ -124,80 +125,76 @@ export default function CalendarWidget() {
 const styles = StyleSheet.create({
   box: { flex: 1 },
 
-  // Month navigator
   monthNav: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.greenFaint,
-    backgroundColor: 'rgba(0,255,65,0.04)',
+    borderBottomColor: COLORS.divider,
+    backgroundColor: COLORS.surfaceElevated,
   },
   navBtn: {
-    width: 28,
-    height: 28,
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.primarySurface,
     borderWidth: 1,
-    borderColor: COLORS.greenFaint,
-    borderRadius: 2,
+    borderColor: COLORS.primary,
   },
   navArrow: {
-    fontFamily: FONTS.mono,
-    color: COLORS.green,
+    fontFamily: FONTS.sans,
+    color: COLORS.primaryLighter,
     fontSize: FONTS.sizes.lg,
+    fontWeight: '700',
     lineHeight: FONTS.sizes.lg + 4,
   },
-  monthTitleWrap: {
-    alignItems: 'center',
-  },
+  monthTitleWrap: { alignItems: 'center' },
   monthLabel: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenBright,
-    fontSize: FONTS.sizes.sm,
-    letterSpacing: 2,
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.textPrimary,
+    fontSize: FONTS.sizes.md,
     fontWeight: '700',
+    letterSpacing: 0.3,
   },
   yearLabel: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenFaint,
-    fontSize: FONTS.sizes.xs,
-    letterSpacing: 3,
+    fontFamily: FONTS.sans,
+    color: COLORS.accent,
+    fontSize: 11,
     marginTop: 1,
   },
 
-  // Day-of-week row
   dowRow: {
     flexDirection: 'row',
-    paddingHorizontal: SPACING.xs,
-    paddingTop: SPACING.xs,
-    paddingBottom: 2,
+    paddingHorizontal: SPACING.sm,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xs,
   },
   dowLabel: {
     flex: 1,
     textAlign: 'center',
-    fontFamily: FONTS.mono,
-    color: COLORS.greenDim,
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.textHint,
     fontSize: FONTS.sizes.xs,
-    letterSpacing: 0.5,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
   dowWeekend: {
-    color: COLORS.amber,
-    opacity: 0.7,
+    color: COLORS.accent,
+    opacity: 0.8,
   },
   headerDivider: {
     height: 1,
-    backgroundColor: COLORS.greenFaint,
-    marginHorizontal: SPACING.xs,
-    opacity: 0.5,
+    backgroundColor: COLORS.divider,
+    marginHorizontal: SPACING.sm,
   },
 
-  // Grid fills remaining space
   grid: {
     flex: 1,
-    paddingHorizontal: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     justifyContent: 'space-around',
   },
@@ -209,28 +206,27 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 3,
+    borderRadius: RADIUS.sm,
     marginHorizontal: 1,
     marginVertical: 1,
   },
   todayCell: {
-    backgroundColor: COLORS.green,
-    borderRadius: 4,
+    backgroundColor: COLORS.primary,
   },
   dayNum: {
-    fontFamily: FONTS.mono,
-    color: COLORS.green,
+    fontFamily: FONTS.sans,
+    color: COLORS.textSecondary,
     fontSize: FONTS.sizes.sm,
     textAlign: 'center',
-    fontWeight: '500',
+    fontWeight: '400',
   },
   todayNum: {
-    color: COLORS.background,
-    fontWeight: '900',
+    color: COLORS.textOnPrimary,
+    fontWeight: '700',
     fontSize: FONTS.sizes.md,
   },
   weekendNum: {
-    color: COLORS.amber,
-    opacity: 0.8,
+    color: COLORS.accent,
+    opacity: 0.9,
   },
 });

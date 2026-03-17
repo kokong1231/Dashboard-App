@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
 import {
   Animated,
+  Platform,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -9,8 +11,7 @@ import {
 import { WebView } from 'react-native-webview';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/navigation/RootNavigator';
-import { COLORS, FONTS, SPACING } from '@/theme';
-import BlinkCursor from '@/components/BlinkCursor';
+import { COLORS, FONTS, RADIUS, SHADOWS, SPACING } from '@/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WebView'>;
 
@@ -25,7 +26,7 @@ export default function WebViewScreen({ route, navigation }: Props) {
     setIsLoading(true);
     loadProgress.setValue(0);
     Animated.timing(loadProgress, {
-      toValue: 0.7,
+      toValue: 0.75,
       duration: 1000,
       useNativeDriver: false,
     }).start();
@@ -49,29 +50,44 @@ export default function WebViewScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.root}>
-      {/* Terminal header */}
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>{'[ ← BACK ]'}</Text>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          activeOpacity={0.75}
+        >
+          <Text style={styles.backText}>← 뒤로</Text>
         </TouchableOpacity>
+
         <View style={styles.titleRow}>
-          <Text style={styles.prompt}>&gt; </Text>
-          <Text style={styles.title} numberOfLines={1}>{title.toUpperCase()}</Text>
-          {isLoading && <BlinkCursor char="_" size={FONTS.sizes.sm} />}
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
+          </Text>
+          {isLoading && <View style={styles.loadingDot} />}
         </View>
-        <TouchableOpacity onPress={() => webViewRef.current?.reload()} style={styles.reloadBtn}>
-          <Text style={styles.reloadText}>{'[↻]'}</Text>
+
+        <TouchableOpacity
+          onPress={() => webViewRef.current?.reload()}
+          style={styles.reloadBtn}
+          activeOpacity={0.75}
+        >
+          <Text style={styles.reloadText}>↻</Text>
         </TouchableOpacity>
       </View>
 
       {/* Progress bar */}
-      {isLoading && (
-        <Animated.View style={[styles.progressBar, { width: progressWidth }]} />
-      )}
+      <View style={styles.progressTrack}>
+        {isLoading && <Animated.View style={[styles.progressFill, { width: progressWidth }]} />}
+      </View>
 
       {/* URL bar */}
       <View style={styles.urlBar}>
-        <Text style={styles.urlText} numberOfLines={1}>{currentUrl}</Text>
+        <Text style={styles.urlText} numberOfLines={1}>
+          {currentUrl}
+        </Text>
       </View>
 
       <WebView
@@ -92,76 +108,88 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: COLORS.background,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0,
   },
   header: {
-    height: 44,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    backgroundColor: COLORS.surfaceElevated,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    paddingHorizontal: SPACING.sm,
-    backgroundColor: 'rgba(0, 255, 65, 0.03)',
+    gap: SPACING.sm,
+    ...SHADOWS.header,
   },
   backBtn: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 6,
+    backgroundColor: COLORS.primarySurface,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
     borderWidth: 1,
-    borderColor: COLORS.borderDim,
+    borderColor: COLORS.primary,
+    flexShrink: 0,
   },
   backText: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenDim,
-    fontSize: FONTS.sizes.xs,
-    letterSpacing: 1,
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.primaryLighter,
+    fontSize: FONTS.sizes.sm,
+    fontWeight: '600',
   },
   titleRow: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: SPACING.sm,
-  },
-  prompt: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenDim,
-    fontSize: FONTS.sizes.sm,
+    gap: SPACING.sm,
   },
   title: {
-    fontFamily: FONTS.mono,
-    color: COLORS.green,
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.textPrimary,
     fontSize: FONTS.sizes.sm,
+    fontWeight: '600',
     flex: 1,
-    letterSpacing: 1,
+  },
+  loadingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: COLORS.primaryLight,
+    flexShrink: 0,
   },
   reloadBtn: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 6,
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.surfaceHighlight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   reloadText: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenDim,
-    fontSize: FONTS.sizes.sm,
+    fontFamily: FONTS.sans,
+    color: COLORS.textSecondary,
+    fontSize: FONTS.sizes.lg,
   },
-  progressBar: {
+  progressTrack: {
     height: 2,
-    backgroundColor: COLORS.green,
-    shadowColor: COLORS.green,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 4,
+    backgroundColor: COLORS.divider,
+  },
+  progressFill: {
+    height: 2,
+    backgroundColor: COLORS.primaryLight,
   },
   urlBar: {
-    height: 24,
+    height: 26,
     paddingHorizontal: SPACING.md,
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 255, 65, 0.02)',
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.greenFaint,
+    borderBottomColor: COLORS.divider,
   },
   urlText: {
     fontFamily: FONTS.mono,
-    color: COLORS.greenFaint,
+    color: COLORS.textHint,
     fontSize: 11,
-    letterSpacing: 0.5,
   },
   webView: {
     flex: 1,

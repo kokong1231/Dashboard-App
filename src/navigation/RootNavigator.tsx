@@ -16,7 +16,8 @@ export default function RootNavigator() {
     <NavigationContainer>
       <Stack.Navigator
         initialRouteName="Home"
-        screenOptions={{ headerShown: false, animation: 'fade' }}>
+        screenOptions={{ headerShown: false, animation: 'fade' }}
+      >
         <Stack.Screen name="Home" component={DashboardScreen} />
         <Stack.Screen name="WebView" component={WebViewScreen} />
       </Stack.Navigator>

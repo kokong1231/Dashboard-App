@@ -1,3 +1,4 @@
+/* eslint-disable react/display-name */
 import React, { memo, useEffect, useState } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
 import Animated, {
@@ -94,19 +95,13 @@ const StreamColumn = memo(({ config, chars, rows }: StreamColumnProps) => {
         false,
       ),
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <View style={[styles.stream, { left: config.x }]}>
       {chars.map((ch, ri) => (
-        <MatrixChar
-          key={ri}
-          char={ch}
-          rowIndex={ri}
-          headY={headY}
-          streamLength={config.length}
-        />
+        <MatrixChar key={ri} char={ch} rowIndex={ri} headY={headY} streamLength={config.length} />
       ))}
     </View>
   );
@@ -125,9 +120,7 @@ const MatrixBackground = memo(({ containerHeight }: MatrixBackgroundProps) => {
   const rows = Math.ceil(effectiveHeight / CHAR_H) + 2;
 
   const [allChars, setAllChars] = useState<string[][]>(() =>
-    Array.from({ length: NUM_STREAMS }, () =>
-      Array.from({ length: rows }, randomChar),
-    ),
+    Array.from({ length: NUM_STREAMS }, () => Array.from({ length: rows }, randomChar)),
   );
 
   useEffect(() => {
@@ -143,7 +136,7 @@ const MatrixBackground = memo(({ containerHeight }: MatrixBackgroundProps) => {
       });
     }, TICK_MS);
     return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

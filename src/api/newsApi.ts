@@ -4,17 +4,66 @@ import { HackerNewsHit } from '@/types';
 // ── Hacker News AI filter ─────────────────────────────────────────────────────
 
 const AI_KEYWORDS = [
-  'ai', 'llm', 'gpt', 'claude', 'gemini', 'llama', 'openai', 'anthropic', 'deepmind',
-  'machine learning', 'deep learning', 'neural', 'transformer', 'diffusion',
-  'artificial intelligence', 'chatgpt', 'mistral', 'copilot', 'sora', 'stable diffusion',
+  'ai',
+  'llm',
+  'gpt',
+  'claude',
+  'gemini',
+  'llama',
+  'openai',
+  'anthropic',
+  'deepmind',
+  'machine learning',
+  'deep learning',
+  'neural',
+  'transformer',
+  'diffusion',
+  'artificial intelligence',
+  'chatgpt',
+  'mistral',
+  'copilot',
+  'sora',
+  'stable diffusion',
 ];
 
 const SOCIAL_KEYWORDS = [
-  'climate', 'economy', 'inflation', 'recession', 'war', 'security', 'privacy',
-  'health', 'science', 'space', 'nasa', 'crypto', 'bitcoin', 'election', 'government',
-  'energy', 'nuclear', 'china', 'russia', 'ukraine', 'pandemic', 'policy', 'regulation',
-  'lawsuit', 'arrest', 'senate', 'congress', 'white house', 'supreme court', 'tariff',
-  'stock', 'market', 'gdp', 'unemployment', 'hack', 'breach', 'cyberattack',
+  'climate',
+  'economy',
+  'inflation',
+  'recession',
+  'war',
+  'security',
+  'privacy',
+  'health',
+  'science',
+  'space',
+  'nasa',
+  'crypto',
+  'bitcoin',
+  'election',
+  'government',
+  'energy',
+  'nuclear',
+  'china',
+  'russia',
+  'ukraine',
+  'pandemic',
+  'policy',
+  'regulation',
+  'lawsuit',
+  'arrest',
+  'senate',
+  'congress',
+  'white house',
+  'supreme court',
+  'tariff',
+  'stock',
+  'market',
+  'gdp',
+  'unemployment',
+  'hack',
+  'breach',
+  'cyberattack',
 ];
 
 function isAIRelated(title: string): boolean {
@@ -60,7 +109,10 @@ function extractBetween(text: string, open: string, close: string): string | nul
 }
 
 function stripCdata(s: string): string {
-  return s.replace(/^<!\[CDATA\[/, '').replace(/\]\]>$/, '').trim();
+  return s
+    .replace(/^<!\[CDATA\[/, '')
+    .replace(/\]\]>$/, '')
+    .trim();
 }
 
 function extractThumbnail(description: string): string | undefined {
@@ -80,13 +132,21 @@ function parseRSSItems(xml: string, sourceName: string): RSSItem[] {
   for (let i = 1; i < parts.length; i++) {
     const chunk = parts[i];
     const rawTitle = extractBetween(chunk, '<title>', '</title>') ?? '';
-    const rawLink = extractBetween(chunk, '<link>', '</link>') ??
+    const rawLink =
+      extractBetween(chunk, '<link>', '</link>') ??
       extractBetween(chunk, '<link/>', '</link>') ??
-      extractBetween(chunk, '<link ', '>') ?? '';
+      extractBetween(chunk, '<link ', '>') ??
+      '';
     const rawPubDate = extractBetween(chunk, '<pubDate>', '</pubDate>') ?? new Date().toISOString();
     const rawDesc = extractBetween(chunk, '<description>', '</description>') ?? '';
 
-    const title = stripCdata(rawTitle).replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+    const title = stripCdata(rawTitle)
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .trim();
     const link = stripCdata(rawLink).trim();
     const description = stripCdata(rawDesc);
     const thumbnail = extractThumbnail(description) ?? extractThumbnail(chunk);
@@ -105,17 +165,37 @@ interface KoreanFeedConfig {
 }
 
 const KOREAN_FEEDS: KoreanFeedConfig[] = [
-  { url: 'https://news.google.com/rss/search?q=한국+AI+인공지능+기술+스타트업&hl=ko&gl=KR&ceid=KR:ko', category: '기술', source: 'Google News' },
-  { url: 'https://news.google.com/rss/search?q=K팝+아이돌+드라마+영화+연예&hl=ko&gl=KR&ceid=KR:ko', category: '연예', source: 'Google News' },
-  { url: 'https://news.google.com/rss/search?q=한국+정치+국회+대통령+여야&hl=ko&gl=KR&ceid=KR:ko', category: '정치', source: 'Google News' },
-  { url: 'https://news.google.com/rss/search?q=한국+경제+주가+증시+금리+부동산&hl=ko&gl=KR&ceid=KR:ko', category: '경제', source: 'Google News' },
-  { url: 'https://news.google.com/rss/search?q=한국+사회+사건+사고+이슈&hl=ko&gl=KR&ceid=KR:ko', category: '사회', source: 'Google News' },
+  {
+    url: 'https://news.google.com/rss/search?q=한국+AI+인공지능+기술+스타트업&hl=ko&gl=KR&ceid=KR:ko',
+    category: '기술',
+    source: 'Google News',
+  },
+  {
+    url: 'https://news.google.com/rss/search?q=K팝+아이돌+드라마+영화+연예&hl=ko&gl=KR&ceid=KR:ko',
+    category: '연예',
+    source: 'Google News',
+  },
+  {
+    url: 'https://news.google.com/rss/search?q=한국+정치+국회+대통령+여야&hl=ko&gl=KR&ceid=KR:ko',
+    category: '정치',
+    source: 'Google News',
+  },
+  {
+    url: 'https://news.google.com/rss/search?q=한국+경제+주가+증시+금리+부동산&hl=ko&gl=KR&ceid=KR:ko',
+    category: '경제',
+    source: 'Google News',
+  },
+  {
+    url: 'https://news.google.com/rss/search?q=한국+사회+사건+사고+이슈&hl=ko&gl=KR&ceid=KR:ko',
+    category: '사회',
+    source: 'Google News',
+  },
 ];
 
 async function fetchKoreanFeed(feed: KoreanFeedConfig): Promise<HackerNewsHit[]> {
   const res = await axios.get(feed.url, {
     timeout: 10000,
-    headers: { 'Accept': 'application/rss+xml, application/xml, text/xml' },
+    headers: { Accept: 'application/rss+xml, application/xml, text/xml' },
   });
   const items = parseRSSItems(res.data as string, feed.source);
   return items.slice(0, 6).map((item, idx) => ({
@@ -138,10 +218,19 @@ async function fetchKoreanFeed(feed: KoreanFeedConfig): Promise<HackerNewsHit[]>
 export async function fetchAINews(): Promise<HackerNewsHit[]> {
   const results = await Promise.allSettled([
     // English HN (AI + social)
-    fetchHNStories('AI artificial intelligence LLM machine learning neural', 25)
-      .then(h => h.filter(i => i.title && isAIRelated(i.title)).slice(0, 8).map(i => ({ ...i, category: 'AI', source: 'HN' }))),
-    fetchHNStories('climate economy security health science space government policy hack', 20)
-      .then(h => h.filter(i => i.title && isSocialRelated(i.title)).slice(0, 6).map(i => ({ ...i, category: '국제', source: 'HN' }))),
+    fetchHNStories('AI artificial intelligence LLM machine learning neural', 25).then(h =>
+      h
+        .filter(i => i.title && isAIRelated(i.title))
+        .slice(0, 8)
+        .map(i => ({ ...i, category: 'AI', source: 'HN' })),
+    ),
+    fetchHNStories('climate economy security health science space government policy hack', 20).then(
+      h =>
+        h
+          .filter(i => i.title && isSocialRelated(i.title))
+          .slice(0, 6)
+          .map(i => ({ ...i, category: '국제', source: 'HN' })),
+    ),
     // Korean RSS
     ...KOREAN_FEEDS.map(fetchKoreanFeed),
   ]);

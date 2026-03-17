@@ -5,7 +5,7 @@ import { COLORS, FONTS } from '@/theme';
 interface TerminalTextProps {
   text: string;
   style?: TextStyle;
-  speed?: number;         // ms per character (0 = instant)
+  speed?: number; // ms per character (0 = instant)
   onComplete?: () => void;
   numberOfLines?: number;
 }
@@ -36,13 +36,11 @@ export default function TerminalText({
       }
     }, speed);
     return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, speed]);
 
   return (
-    <Text
-      style={[defaultStyle, style]}
-      numberOfLines={numberOfLines}>
+    <Text style={[defaultStyle, style]} numberOfLines={numberOfLines}>
       {displayed}
     </Text>
   );

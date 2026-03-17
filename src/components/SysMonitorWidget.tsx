@@ -9,33 +9,22 @@ import {
   getTotalMemorySync,
 } from 'react-native-device-info';
 import GlowBox from './GlowBox';
-import { COLORS, FONTS, SPACING } from '@/theme';
-
-// ── Constants ─────────────────────────────────────────────────────────────────
+import { COLORS, FONTS, RADIUS, SPACING } from '@/theme';
 
 const QUOTES = [
-  { text: 'The best code is no code at all.', src: 'JEFF ATWOOD' },
-  { text: 'First solve the problem, then write the code.', src: 'J. JOHNSON' },
-  { text: 'Simplicity is the soul of efficiency.', src: 'A. FREEMAN' },
-  { text: 'Make it work, make it right, make it fast.', src: 'KENT BECK' },
-  { text: 'Any fool can write code a computer understands.', src: 'M. FOWLER' },
-  { text: 'Programs must be written for people to read.', src: 'H. ABELSON' },
-  { text: 'Code is like humor. When you have to explain it, its bad.', src: 'C. HOUSE' },
-  { text: '"Weve always done it this way" is the most dangerous phrase.', src: 'G. HOPPER' },
-  { text: 'Fix the cause, not the symptom.', src: 'S. MAGUIRE' },
-  { text: 'Premature optimization is the root of all evil.', src: 'D. KNUTH' },
-  { text: 'Talk is cheap. Show me the code.', src: 'L. TORVALDS' },
-  { text: 'In theory and practice, they are the same. In practice, they are not.', src: 'Y. BERRA' },
+  { text: 'The best code is no code at all.', src: 'Jeff Atwood' },
+  { text: 'First solve the problem, then write the code.', src: 'J. Johnson' },
+  { text: 'Simplicity is the soul of efficiency.', src: 'A. Freeman' },
+  { text: 'Make it work, make it right, make it fast.', src: 'Kent Beck' },
+  { text: 'Any fool can write code a computer understands.', src: 'M. Fowler' },
+  { text: 'Programs must be written for people to read.', src: 'H. Abelson' },
+  { text: 'Talk is cheap. Show me the code.', src: 'L. Torvalds' },
+  { text: 'Fix the cause, not the symptom.', src: 'S. Maguire' },
+  { text: 'Premature optimization is the root of all evil.', src: 'D. Knuth' },
 ];
 
 const STATS_EVERY = 3;
 const QUOTE_EVERY = 15;
-// Uniform column widths
-const LABEL_W  = 32;  // left label
-const VALUE_W  = 40;  // right value / percentage
-const BAR_BARS = 9;   // number of block chars in bar
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, n));
@@ -45,146 +34,130 @@ function fluctuate(current: number, min: number, max: number, delta: number): nu
 }
 
 interface Stats {
-  cpu: number; mem: number; gpu: number; disk: number;
-  temp: number; netUp: number; netDown: number; netPing: number;
-  processes: number; threads: number; swapUsed: number; cacheUsed: number;
+  cpu: number;
+  mem: number;
+  gpu: number;
+  disk: number;
+  temp: number;
+  netUp: number;
+  netDown: number;
+  netPing: number;
+  processes: number;
+  threads: number;
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-/** Section separator with title */
-function Section({ title }: { title: string }) {
+function SectionLabel({ text }: { text: string }) {
   return (
     <View style={styles.sectionRow}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionTitle}>{text}</Text>
       <View style={styles.sectionLine} />
     </View>
   );
 }
 
-/** Horizontal divider */
-function Divider() {
-  return <View style={styles.divider} />;
-}
-
-/** Label + bar + value, all fixed-width for perfect column alignment */
-function BarRow({
-  label, value, max, color,
-}: {
-  label: string; value: number; max: number; color: string;
-}) {
-  const filled = Math.round((value / max) * BAR_BARS);
-  const empty = BAR_BARS - filled;
-  const bar = '█'.repeat(filled) + '░'.repeat(empty);
-  const pct = `${String(value).padStart(3, ' ')}%`;
+function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
+  const pct = Math.min(100, Math.max(0, (value / max) * 100));
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={[styles.rowBar, { color }]}>{bar}</Text>
-      <Text style={[styles.rowValue, { color }]}>{pct}</Text>
+    <View style={styles.progressTrack}>
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+      <View style={[styles.progressFill, { width: `${pct}%` as any, backgroundColor: color }]} />
     </View>
   );
 }
 
-/** Label + plain value, right-aligned */
-function KVRow({
-  label, value, color = COLORS.green,
+function StatRow({
+  label,
+  value,
+  showBar,
+  barMax = 100,
+  color,
 }: {
-  label: string; value: string; color?: string;
+  label: string;
+  value: string | number;
+  showBar?: boolean;
+  barMax?: number;
+  color?: string;
 }) {
+  const displayColor = color ?? COLORS.primaryLight;
+  const numVal = typeof value === 'number' ? value : parseInt(String(value), 10);
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={[styles.rowValue, styles.rowValueFull, { color }]} numberOfLines={1}>{value}</Text>
-    </View>
-  );
-}
-
-/** Two KV pairs side-by-side in one row */
-function KVDualRow({
-  labelA, valueA, colorA,
-  labelB, valueB, colorB,
-}: {
-  labelA: string; valueA: string; colorA?: string;
-  labelB: string; valueB: string; colorB?: string;
-}) {
-  return (
-    <View style={styles.dualRow}>
-      <View style={styles.dualCell}>
-        <Text style={styles.rowLabel}>{labelA}</Text>
-        <Text style={[styles.dualValue, { color: colorA ?? COLORS.green }]}>{valueA}</Text>
-      </View>
-      <View style={styles.dualCell}>
-        <Text style={styles.rowLabel}>{labelB}</Text>
-        <Text style={[styles.dualValue, { color: colorB ?? COLORS.green }]}>{valueB}</Text>
+    <View style={styles.statRow}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <View style={styles.statRight}>
+        {showBar && !isNaN(numVal) && (
+          <ProgressBar value={numVal} max={barMax} color={displayColor} />
+        )}
+        <Text style={[styles.statValue, { color: displayColor }]}>
+          {typeof value === 'number' ? `${value}%` : value}
+        </Text>
       </View>
     </View>
   );
 }
-
-/** Battery block bar */
-function BattBar({ pct, color }: { pct: number; color: string }) {
-  const filled = Math.round((pct / 100) * BAR_BARS);
-  const empty = BAR_BARS - filled;
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>BAT</Text>
-      <Text style={[styles.rowBar, { color }]}>{'█'.repeat(filled) + '░'.repeat(empty)}</Text>
-      <Text style={[styles.rowValue, { color }]}>{`${pct}%`}</Text>
-    </View>
-  );
-}
-
-// ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function SysMonitorWidget() {
   const batteryLevel = useBatteryLevel();
   const powerState = usePowerState();
 
   const [stats, setStats] = useState<Stats>({
-    cpu: 38, mem: 61, gpu: 22, disk: 74,
-    temp: 44, netUp: 12, netDown: 48, netPing: 18,
-    processes: 218, threads: 1042, swapUsed: 28, cacheUsed: 15,
+    cpu: 38,
+    mem: 61,
+    gpu: 22,
+    disk: 74,
+    temp: 44,
+    netUp: 12,
+    netDown: 48,
+    netPing: 18,
+    processes: 218,
+    threads: 1042,
   });
   const [quoteIdx, setQuoteIdx] = useState(0);
   const [uptime, setUptime] = useState(0);
-  const [deviceName, setDeviceName] = useState('ANDROID');
-  const [osVersion, setOsVersion]   = useState('--');
-  const [totalMemGB, setTotalMemGB] = useState('--');
+  const [deviceName] = useState(() => {
+    try {
+      return getDeviceNameSync();
+    } catch {
+      return 'Android';
+    }
+  });
+  const [osVersion] = useState(() => {
+    try {
+      return `Android ${getSystemVersion()}`;
+    } catch {
+      return '--';
+    }
+  });
+  const [totalMemGB] = useState(() => {
+    try {
+      return `${(getTotalMemorySync() / 1073741824).toFixed(1)} GB`;
+    } catch {
+      return '--';
+    }
+  });
   const tickRef = useRef(0);
-
-  useEffect(() => {
-    try { setDeviceName(getDeviceNameSync().toUpperCase()); } catch {}
-    try { setOsVersion(`ANDROID ${getSystemVersion()}`); } catch {}
-    try { setTotalMemGB(`${(getTotalMemorySync() / 1073741824).toFixed(1)} GB`); } catch {}
-  }, []);
 
   useEffect(() => {
     const id = setInterval(() => {
       tickRef.current += 1;
       const tick = tickRef.current;
       setUptime(tick);
-
       if (tick % STATS_EVERY === 0) {
         setStats(prev => {
           const cpu = fluctuate(prev.cpu, 8, 92, 10);
           return {
             cpu,
-            mem:       fluctuate(prev.mem,       40,  85,  4),
-            gpu:       fluctuate(prev.gpu,         5,  75, 12),
-            disk:      fluctuate(prev.disk,       60,  95,  1),
-            temp:      clamp(Math.round(35 + cpu * 0.45 + (Math.random() - 0.5) * 4), 30, 88),
-            netUp:     fluctuate(prev.netUp,       1, 150, 18),
-            netDown:   fluctuate(prev.netDown,     1, 280, 28),
-            netPing:   fluctuate(prev.netPing,     5, 120, 12),
-            processes: fluctuate(prev.processes, 180, 310,  8),
-            threads:   fluctuate(prev.threads,   900, 1400, 30),
-            swapUsed:  fluctuate(prev.swapUsed,   10,  55,  3),
-            cacheUsed: fluctuate(prev.cacheUsed,   8,  35,  2),
+            mem: fluctuate(prev.mem, 40, 85, 4),
+            gpu: fluctuate(prev.gpu, 5, 75, 12),
+            disk: fluctuate(prev.disk, 60, 95, 1),
+            temp: clamp(Math.round(35 + cpu * 0.45 + (Math.random() - 0.5) * 4), 30, 88),
+            netUp: fluctuate(prev.netUp, 1, 150, 18),
+            netDown: fluctuate(prev.netDown, 1, 280, 28),
+            netPing: fluctuate(prev.netPing, 5, 120, 12),
+            processes: fluctuate(prev.processes, 180, 310, 8),
+            threads: fluctuate(prev.threads, 900, 1400, 30),
           };
         });
       }
-
       if (tick % QUOTE_EVERY === 0) {
         setQuoteIdx(i => (i + 1) % QUOTES.length);
       }
@@ -195,105 +168,99 @@ export default function SysMonitorWidget() {
   const hh = Math.floor(uptime / 3600);
   const mm = Math.floor((uptime % 3600) / 60);
   const ss = uptime % 60;
-  const uptimeStr = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  const uptimeStr = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(
+    ss,
+  ).padStart(2, '0')}`;
 
-  const cpuColor  = stats.cpu  > 80 ? COLORS.red : stats.cpu  > 60 ? COLORS.amber : COLORS.green;
-  const memColor  = stats.mem  > 80 ? COLORS.red : stats.mem  > 65 ? COLORS.amber : COLORS.green;
-  const gpuColor  = stats.gpu  > 70 ? COLORS.amber : COLORS.green;
-  const diskColor = stats.disk > 90 ? COLORS.red  : stats.disk > 75 ? COLORS.amber : COLORS.green;
-  const tempColor = stats.temp > 75 ? COLORS.red  : stats.temp > 60 ? COLORS.amber : COLORS.cyan;
-  const pingColor = stats.netPing > 80 ? COLORS.red : stats.netPing > 40 ? COLORS.amber : COLORS.green;
+  const cpuColor = stats.cpu > 80 ? COLORS.error : stats.cpu > 60 ? COLORS.warning : COLORS.success;
+  const memColor =
+    stats.mem > 80 ? COLORS.error : stats.mem > 65 ? COLORS.warning : COLORS.primaryLight;
+  const gpuColor = stats.gpu > 70 ? COLORS.warning : COLORS.primaryLighter;
+  const diskColor = stats.disk > 90 ? COLORS.error : stats.disk > 75 ? COLORS.warning : COLORS.info;
+  const tempColor =
+    stats.temp > 75 ? COLORS.error : stats.temp > 60 ? COLORS.warning : COLORS.success;
+  const pingColor =
+    stats.netPing > 80 ? COLORS.error : stats.netPing > 40 ? COLORS.warning : COLORS.success;
 
-  const battPct = batteryLevel != null && batteryLevel >= 0
-    ? Math.round((batteryLevel as number) * 100) : null;
+  const battPct =
+    batteryLevel != null && batteryLevel >= 0 ? Math.round((batteryLevel as number) * 100) : null;
   const isCharging = powerState.batteryState === 'charging' || powerState.batteryState === 'full';
-  const battColor = battPct == null ? COLORS.greenDim
-    : battPct >= 60 ? COLORS.green : battPct >= 25 ? COLORS.amber : COLORS.red;
+  const battColor =
+    battPct == null
+      ? COLORS.textHint
+      : battPct >= 60
+      ? COLORS.success
+      : battPct >= 25
+      ? COLORS.warning
+      : COLORS.error;
 
   const quote = QUOTES[quoteIdx];
 
   return (
-    <GlowBox title="◈ SYS::MONITOR" style={styles.box} noPadding>
+    <GlowBox title="시스템" style={styles.box} noPadding>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Device */}
+        <SectionLabel text="기기" />
+        <StatRow label="기기명" value={deviceName} color={COLORS.textPrimary} />
+        <StatRow label="OS" value={osVersion} color={COLORS.textSecondary} />
+        <StatRow label="메모리" value={totalMemGB} color={COLORS.textSecondary} />
+        <StatRow label="가동 시간" value={uptimeStr} color={COLORS.accent} />
 
-        {/* ── DEVICE ── */}
-        <Section title="DEVICE" />
-        <KVRow label="NODE" value={deviceName} color={COLORS.greenBright} />
-        <KVRow label="OS  " value={osVersion} />
-        <KVRow label="RAM " value={totalMemGB} />
-        <KVRow label="UP  " value={uptimeStr} color={COLORS.cyan} />
+        <View style={styles.divider} />
 
-        <Divider />
+        {/* Compute */}
+        <SectionLabel text="컴퓨팅" />
+        <StatRow label="CPU" value={stats.cpu} showBar color={cpuColor} />
+        <StatRow label="GPU" value={stats.gpu} showBar color={gpuColor} />
+        <StatRow label="온도" value={`${stats.temp} °C`} color={tempColor} />
 
-        {/* ── COMPUTE ── */}
-        <Section title="COMPUTE" />
-        <BarRow label="CPU " value={stats.cpu} max={100} color={cpuColor} />
-        <BarRow label="GPU " value={stats.gpu} max={100} color={gpuColor} />
-        <KVRow  label="TEMP" value={`${stats.temp} °C`} color={tempColor} />
+        <View style={styles.divider} />
 
-        <Divider />
+        {/* Memory */}
+        <SectionLabel text="메모리" />
+        <StatRow label="RAM" value={stats.mem} showBar color={memColor} />
 
-        {/* ── MEMORY ── */}
-        <Section title="MEMORY" />
-        <BarRow label="MEM " value={stats.mem}      max={100} color={memColor} />
-        <BarRow label="SWAP" value={stats.swapUsed} max={100} color={COLORS.greenDim} />
-        <BarRow label="CCHE" value={stats.cacheUsed} max={100} color={COLORS.greenFaint} />
+        <View style={styles.divider} />
 
-        <Divider />
+        {/* Storage */}
+        <SectionLabel text="스토리지" />
+        <StatRow label="디스크" value={stats.disk} showBar color={diskColor} />
 
-        {/* ── STORAGE ── */}
-        <Section title="STORAGE" />
-        <BarRow label="DISK" value={stats.disk} max={100} color={diskColor} />
+        <View style={styles.divider} />
 
-        <Divider />
+        {/* Network */}
+        <SectionLabel text="네트워크" />
+        <StatRow label="업로드" value={`↑ ${stats.netUp} KB/s`} color={COLORS.success} />
+        <StatRow label="다운로드" value={`↓ ${stats.netDown} KB/s`} color={COLORS.primaryLight} />
+        <StatRow label="핑" value={`${stats.netPing} ms`} color={pingColor} />
 
-        {/* ── NETWORK ── */}
-        <Section title="NETWORK" />
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>{'UP  '}</Text>
-          <Text style={[styles.rowBar, { color: COLORS.green }]}>{`↑ ${String(stats.netUp).padStart(4,' ')} KB/s`}</Text>
-          <Text style={[styles.rowValue, { color: COLORS.green }]}> </Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>{'DOWN'}</Text>
-          <Text style={[styles.rowBar, { color: COLORS.amber }]}>{`↓ ${String(stats.netDown).padStart(4,' ')} KB/s`}</Text>
-          <Text style={[styles.rowValue, { color: COLORS.amber }]}> </Text>
-        </View>
-        <KVRow label="PING" value={`${stats.netPing} ms`} color={pingColor} />
-
-        <Divider />
-
-        {/* ── PROCESSES ── */}
-        <Section title="PROCESSES" />
-        <KVDualRow
-          labelA="PROC" valueA={String(stats.processes)} colorA={COLORS.green}
-          labelB="THRD" valueB={String(stats.threads)}   colorB={COLORS.greenDim}
-        />
-
-        {/* ── POWER ── */}
+        {/* Power */}
         {battPct != null && (
           <>
-            <Divider />
-            <Section title="POWER" />
-            <BattBar pct={battPct} color={battColor} />
-            <KVRow
-              label="STAT"
-              value={isCharging ? '⚡ CHARGING' : 'DISCHARGING'}
-              color={isCharging ? COLORS.amber : battColor}
+            <View style={styles.divider} />
+            <SectionLabel text="배터리" />
+            <StatRow label="충전량" value={battPct} showBar color={battColor} />
+            <StatRow
+              label="상태"
+              value={isCharging ? '⚡ 충전 중' : '사용 중'}
+              color={isCharging ? COLORS.warning : battColor}
             />
           </>
         )}
 
-        <Divider />
+        <View style={styles.divider} />
 
-        {/* ── THOUGHT STREAM ── */}
-        <Section title="THOUGHT STREAM" />
+        {/* Quote */}
+        <SectionLabel text="오늘의 한 마디" />
         <Animated.View key={quoteIdx} entering={FadeIn.duration(800)}>
-          <Text style={styles.quoteText}>{`"${quote.text}"`}</Text>
-          <Text style={styles.quoteSrc}>{`  — ${quote.src}`}</Text>
+          <View style={styles.quoteCard}>
+            <Text style={styles.quoteText}>{`"${quote.text}"`}</Text>
+            <Text style={styles.quoteSrc}>— {quote.src}</Text>
+          </View>
         </Animated.View>
 
         <View style={{ height: SPACING.md }} />
@@ -302,104 +269,90 @@ export default function SysMonitorWidget() {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   box: { flex: 1 },
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: SPACING.sm, paddingTop: SPACING.xs },
+  scrollContent: { paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
 
-  // Section header
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 4,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.sm,
+    gap: SPACING.sm,
   },
   sectionTitle: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenFaint,
-    fontSize: 9,
-    letterSpacing: 2,
-    marginRight: 6,
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.accent,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   sectionLine: {
     flex: 1,
     height: 1,
-    backgroundColor: COLORS.greenFaint,
-    opacity: 0.4,
+    backgroundColor: COLORS.divider,
   },
 
   divider: {
     height: 1,
-    backgroundColor: COLORS.greenFaint,
-    marginVertical: 4,
-    opacity: 0.3,
+    backgroundColor: COLORS.divider,
+    marginVertical: SPACING.sm,
   },
 
-  // Universal row: [label | content | value]
-  row: {
+  statRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 3,
+    marginBottom: SPACING.sm,
   },
-  rowLabel: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenDim,
-    fontSize: 10,
-    letterSpacing: 1,
-    width: LABEL_W,
+  statLabel: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textHint,
+    fontSize: FONTS.sizes.xs,
+    width: 60,
   },
-  rowBar: {
-    fontFamily: FONTS.mono,
-    fontSize: 10,
+  statRight: {
     flex: 1,
-    letterSpacing: -0.5,
+    gap: 4,
   },
-  rowValue: {
-    fontFamily: FONTS.mono,
-    fontSize: 10,
-    width: VALUE_W,
+  progressTrack: {
+    height: 4,
+    backgroundColor: COLORS.border,
+    borderRadius: RADIUS.full,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: RADIUS.full,
+  },
+  statValue: {
+    fontFamily: FONTS.sansMedium,
+    fontSize: FONTS.sizes.xs,
+    fontWeight: '600',
     textAlign: 'right',
-    letterSpacing: 0.5,
-  },
-  rowValueFull: {
-    flex: 1,
-    width: undefined,
   },
 
-  // Dual KV row (two columns)
-  dualRow: {
-    flexDirection: 'row',
-    marginBottom: 3,
+  quoteCard: {
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADIUS.sm,
+    padding: SPACING.md,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  dualCell: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dualValue: {
-    fontFamily: FONTS.mono,
-    fontSize: 10,
-    letterSpacing: 0.5,
-    flex: 1,
-    textAlign: 'right',
-    paddingRight: 4,
-  },
-
-  // Quote
   quoteText: {
-    fontFamily: FONTS.mono,
-    color: COLORS.green,
-    fontSize: 10,
-    lineHeight: 16,
+    fontFamily: FONTS.sans,
+    color: COLORS.textSecondary,
+    fontSize: FONTS.sizes.xs,
+    lineHeight: 18,
     fontStyle: 'italic',
-    marginBottom: 3,
+    marginBottom: SPACING.xs,
   },
   quoteSrc: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenDim,
-    fontSize: 9,
-    letterSpacing: 0.5,
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.accent,
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

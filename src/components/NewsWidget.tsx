@@ -15,29 +15,27 @@ import { RootStackParamList } from '@/navigation/RootNavigator';
 import { useNewsStore } from '@/store/useNewsStore';
 import { formatRelativeTime } from '@/utils/formatters';
 import GlowBox from './GlowBox';
-import PulseText from './PulseText';
-import { COLORS, FONTS, SPACING } from '@/theme';
+import { COLORS, FONTS, RADIUS, SPACING } from '@/theme';
 import { useInterval } from '@/hooks/useInterval';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
-// Category color map
-const CAT_COLORS: Record<string, string> = {
-  'AI':   COLORS.cyan,
-  '기술': COLORS.greenBright,
-  '연예': '#ff69b4',
-  '정치': COLORS.amber,
-  '경제': '#ffd700',
-  '사회': '#ff6b35',
-  '국제': COLORS.greenDim,
+const CAT_STYLES: Record<string, { bg: string; text: string }> = {
+  AI: { bg: COLORS.primarySurface, text: COLORS.primaryLighter },
+  기술: { bg: COLORS.infoDim, text: COLORS.info },
+  연예: { bg: 'rgba(255,105,180,0.15)', text: '#FF69B4' },
+  정치: { bg: COLORS.warningDim, text: COLORS.warning },
+  경제: { bg: 'rgba(255,215,0,0.12)', text: '#FFD700' },
+  사회: { bg: 'rgba(255,107,53,0.12)', text: '#FF6B35' },
+  국제: { bg: COLORS.successDim, text: COLORS.success },
 };
 
 function CategoryBadge({ cat }: { cat?: string }) {
   if (!cat) return null;
-  const color = CAT_COLORS[cat] ?? COLORS.greenDim;
+  const style = CAT_STYLES[cat] ?? { bg: COLORS.accentDim, text: COLORS.accent };
   return (
-    <View style={[styles.catBadge, { borderColor: color }]}>
-      <Text style={[styles.catText, { color }]}>{cat}</Text>
+    <View style={[styles.catBadge, { backgroundColor: style.bg }]}>
+      <Text style={[styles.catText, { color: style.text }]}>{cat}</Text>
     </View>
   );
 }
@@ -54,10 +52,9 @@ export default function NewsWidget() {
     fetch();
   }, [fetch]);
 
-  // Auto-scroll every 5 seconds
   useInterval(() => {
     if (!autoScroll || userScrolling.current || items.length === 0) return;
-    scrollYRef.current += 88;
+    scrollYRef.current += 92;
     scrollRef.current?.scrollTo({ y: scrollYRef.current, animated: true });
   }, 5000);
 
@@ -79,84 +76,89 @@ export default function NewsWidget() {
   };
 
   const lastSyncStr = lastFetched
-    ? new Date(lastFetched).toLocaleTimeString('en-GB', { hour12: false })
-    : '--:--:--';
+    ? new Date(lastFetched).toLocaleTimeString('ko-KR', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '--:--';
 
   if (isLoading && items.length === 0) {
     return (
-      <GlowBox title="◈ AI//NEWS_FEED" style={styles.box}>
-        <PulseText style={styles.loading} duration={600}>
-          {'> SCANNING FEEDS...'}
-        </PulseText>
+      <GlowBox title="뉴스 피드" style={styles.box}>
+        <Text style={styles.loadingText}>피드 불러오는 중...</Text>
       </GlowBox>
     );
   }
 
   if (error && items.length === 0) {
     return (
-      <GlowBox title="◈ AI//NEWS_FEED" style={styles.box}>
-        <Text style={styles.error}>{`> ERR: ${error}`}</Text>
+      <GlowBox title="뉴스 피드" style={styles.box}>
+        <Text style={styles.errorText}>{error}</Text>
       </GlowBox>
     );
   }
 
   return (
-    <GlowBox title="◈ AI//NEWS_FEED" titleRight={`${items.length} ITEMS`} style={styles.box}>
+    <GlowBox title="뉴스 피드" titleRight={`${items.length}개`} style={styles.box}>
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
-        onScrollEndDrag={() => { userScrolling.current = false; }}
-        onScrollBeginDrag={() => { userScrolling.current = true; setAutoScroll(false); }}
-        onMomentumScrollEnd={handleScrollEnd}>
+        onScrollEndDrag={() => {
+          userScrolling.current = false;
+        }}
+        onScrollBeginDrag={() => {
+          userScrolling.current = true;
+          setAutoScroll(false);
+        }}
+        onMomentumScrollEnd={handleScrollEnd}
+      >
         {items.map((item, idx) => (
           <TouchableOpacity
             key={item.objectID}
             onPress={() => openUrl(item.url, item.objectID, item.title)}
-            activeOpacity={0.7}>
-            <View style={styles.itemContainer}>
-              <View style={styles.itemRow}>
-                {/* Thumbnail */}
-                {item.thumbnail ? (
-                  <Image
-                    source={{ uri: item.thumbnail }}
-                    style={styles.thumbnail}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.thumbnailPlaceholder}>
-                    <Text style={styles.thumbIdx}>{String(idx + 1).padStart(2, '0')}</Text>
+            activeOpacity={0.75}
+          >
+            <View style={styles.itemCard}>
+              {/* Thumbnail / index */}
+              {item.thumbnail ? (
+                <Image
+                  source={{ uri: item.thumbnail }}
+                  style={styles.thumbnail}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.thumbPlaceholder}>
+                  <Text style={styles.thumbIdx}>{String(idx + 1).padStart(2, '0')}</Text>
+                </View>
+              )}
+
+              <View style={styles.itemContent}>
+                <View style={styles.metaRow}>
+                  <CategoryBadge cat={item.category} />
+                  {item.source && item.source !== 'HN' && (
+                    <Text style={styles.sourceText}>{item.source}</Text>
+                  )}
+                  <Text style={styles.timeText}>{formatRelativeTime(item.created_at)}</Text>
+                </View>
+
+                <Text style={styles.title} numberOfLines={2}>
+                  {item.title}
+                </Text>
+
+                {item.points > 0 && (
+                  <View style={styles.statsRow}>
+                    <Text style={styles.statsText}>▲ {item.points}</Text>
+                    <Text style={styles.statsDot}> · </Text>
+                    <Text style={styles.statsText}>{item.num_comments} 댓글</Text>
                   </View>
                 )}
-
-                <View style={styles.itemContent}>
-                  {/* Category + meta row */}
-                  <View style={styles.metaTop}>
-                    <CategoryBadge cat={item.category} />
-                    {item.source && item.source !== 'HN' && (
-                      <Text style={styles.sourceText}>{item.source}</Text>
-                    )}
-                    <Text style={styles.metaTime}>{formatRelativeTime(item.created_at)}</Text>
-                  </View>
-
-                  {/* Title */}
-                  <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-
-                  {/* Points & comments (HN only) */}
-                  {item.points > 0 && (
-                    <View style={styles.metaBottom}>
-                      <Text style={styles.metaText}>{`▲ ${item.points}`}</Text>
-                      <Text style={styles.metaSep}> · </Text>
-                      <Text style={styles.metaText}>{`${item.num_comments} CMT`}</Text>
-                    </View>
-                  )}
-                </View>
               </View>
-              <View style={styles.divider} />
             </View>
           </TouchableOpacity>
         ))}
 
-        <Text style={styles.sync}>{`SYNC: ${lastSyncStr} [AUTO-REFRESH]`}</Text>
+        <Text style={styles.syncText}>업데이트 {lastSyncStr}</Text>
         <View style={{ height: SPACING.lg }} />
       </ScrollView>
     </GlowBox>
@@ -165,105 +167,102 @@ export default function NewsWidget() {
 
 const styles = StyleSheet.create({
   box: { flex: 1 },
-  loading: { fontFamily: FONTS.mono, color: COLORS.amber, fontSize: FONTS.sizes.sm },
-  error: { fontFamily: FONTS.mono, color: COLORS.red, fontSize: FONTS.sizes.sm },
+  loadingText: { fontFamily: FONTS.sans, color: COLORS.textHint, fontSize: FONTS.sizes.sm },
+  errorText: { fontFamily: FONTS.sans, color: COLORS.error, fontSize: FONTS.sizes.sm },
 
-  itemContainer: { marginBottom: 2 },
-  itemRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  itemCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+    gap: SPACING.sm,
+  },
 
   thumbnail: {
-    width: 52,
-    height: 52,
-    borderRadius: 2,
-    borderWidth: 1,
-    borderColor: COLORS.greenFaint,
-    marginRight: SPACING.xs,
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.sm,
     flexShrink: 0,
+    backgroundColor: COLORS.surfaceElevated,
   },
-  thumbnailPlaceholder: {
-    width: 52,
-    height: 52,
-    borderWidth: 1,
-    borderColor: COLORS.greenFaint,
-    marginRight: SPACING.xs,
+  thumbPlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.sm,
     flexShrink: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,255,65,0.04)',
+    backgroundColor: COLORS.surfaceElevated,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   thumbIdx: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenFaint,
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.textHint,
     fontSize: FONTS.sizes.xs,
+    fontWeight: '600',
   },
 
   itemContent: { flex: 1 },
 
-  metaTop: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 3,
-    gap: 4,
+    marginBottom: 4,
+    gap: 5,
+    flexWrap: 'wrap',
   },
   catBadge: {
-    borderWidth: 1,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
   },
   catText: {
-    fontFamily: FONTS.mono,
+    fontFamily: FONTS.sansMedium,
     fontSize: 10,
-    letterSpacing: 0.5,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
   sourceText: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenFaint,
+    fontFamily: FONTS.sans,
+    color: COLORS.textHint,
     fontSize: 10,
     flex: 1,
   },
-  metaTime: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenDim,
+  timeText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textHint,
     fontSize: 10,
     marginLeft: 'auto',
   },
 
   title: {
-    fontFamily: FONTS.mono,
-    color: COLORS.green,
-    fontSize: FONTS.sizes.xs,
-    lineHeight: 18,
-    marginBottom: 2,
+    fontFamily: FONTS.sans,
+    color: COLORS.textPrimary,
+    fontSize: FONTS.sizes.sm,
+    lineHeight: 20,
+    marginBottom: 3,
+    fontWeight: '500',
   },
 
-  metaBottom: {
-    flexDirection: 'row',
-    marginTop: 2,
+  statsRow: { flexDirection: 'row' },
+  statsText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textHint,
+    fontSize: 11,
   },
-  metaText: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenDim,
-    fontSize: 10,
-    letterSpacing: 0.5,
-  },
-  metaSep: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenFaint,
-    fontSize: 10,
+  statsDot: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textDisabled,
+    fontSize: 11,
   },
 
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.greenFaint,
-    marginVertical: SPACING.xs,
-    opacity: 0.4,
-  },
-  sync: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenFaint,
-    fontSize: FONTS.sizes.xs,
-    letterSpacing: 1,
-    marginTop: SPACING.xs,
+  syncText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textHint,
+    fontSize: 11,
+    textAlign: 'right',
+    marginTop: SPACING.sm,
   },
 });

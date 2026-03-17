@@ -18,37 +18,46 @@ import { fetchPageBlocks, queryDatabasePages, richTextToPlain } from '@/api/noti
 import { NotionBlock, NotionPageListItem, NotionRichText } from '@/types';
 import { formatRelativeTime } from '@/utils/formatters';
 import GlowBox from './GlowBox';
-import PulseText from './PulseText';
 import { useInterval } from '@/hooks/useInterval';
-import { COLORS, FONTS, SPACING } from '@/theme';
+import { COLORS, FONTS, RADIUS, SPACING } from '@/theme';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 const PAGE_POLL_INTERVAL = 30 * 1000;
-const DB_POLL_INTERVAL   = 30 * 1000;
-
-// ── View stack ────────────────────────────────────────────────────────────────
+const DB_POLL_INTERVAL = 30 * 1000;
 
 type NotionView =
   | { kind: 'home' }
   | { kind: 'database'; id: string; title: string }
   | { kind: 'page'; id: string; title: string; url: string };
 
-// ── Notion color → app color ─────────────────────────────────────────────────
-
 function notionColor(c: string | undefined): string {
-  if (!c) return COLORS.green;
+  if (!c) return COLORS.textPrimary;
   switch (c) {
-    case 'red':    case 'red_background':    return COLORS.red;
-    case 'yellow': case 'yellow_background': return COLORS.amber;
-    case 'blue':   case 'blue_background':   return COLORS.cyan;
-    case 'green':  case 'green_background':  return COLORS.greenBright;
-    case 'gray':   case 'grey':              return COLORS.greenDim;
-    default: return COLORS.green;
+    case 'red':
+    case 'red_background':
+      return COLORS.error;
+    case 'yellow':
+    case 'yellow_background':
+      return COLORS.warning;
+    case 'blue':
+    case 'blue_background':
+      return COLORS.info;
+    case 'green':
+    case 'green_background':
+      return COLORS.success;
+    case 'purple':
+    case 'purple_background':
+      return COLORS.primaryLighter;
+    case 'gray':
+    case 'grey':
+      return COLORS.textHint;
+    default:
+      return COLORS.textPrimary;
   }
 }
 
-// ── Rich text inline renderer ─────────────────────────────────────────────────
+// ── Rich text renderer ────────────────────────────────────────────────────────
 
 interface RichTextProps {
   richText: NotionRichText[];
@@ -64,19 +73,24 @@ function RichTextView({ richText, style, onLinkPress }: RichTextProps) {
     <Text style={[styles.baseText, style]}>
       {richText.map((rt, i) => {
         const isLink = !!rt.href && !!onLinkPress;
-        const c = notionColor(rt.annotations.color !== 'default' ? rt.annotations.color : undefined);
+        const c = notionColor(
+          rt.annotations.color !== 'default' ? rt.annotations.color : undefined,
+        );
         return (
           <Text
             key={i}
-            style={[
-              rt.annotations.bold          && annotStyles.bold,
-              rt.annotations.italic        && annotStyles.italic,
-              rt.annotations.strikethrough && annotStyles.strike,
-              rt.annotations.code          && annotStyles.code,
-              rt.annotations.color !== 'default' && { color: c },
-              isLink && styles.link,
-            ] as StyleProp<TextStyle>}
-            onPress={isLink ? () => onLinkPress!(rt.href!) : undefined}>
+            style={
+              [
+                rt.annotations.bold && annotStyles.bold,
+                rt.annotations.italic && annotStyles.italic,
+                rt.annotations.strikethrough && annotStyles.strike,
+                rt.annotations.code && annotStyles.code,
+                rt.annotations.color !== 'default' && { color: c },
+                isLink && styles.link,
+              ] as StyleProp<TextStyle>
+            }
+            onPress={isLink ? () => onLinkPress!(rt.href!) : undefined}
+          >
             {rt.plain_text}
           </Text>
         );
@@ -85,10 +99,11 @@ function RichTextView({ richText, style, onLinkPress }: RichTextProps) {
   );
 }
 
-// ── Table renderer ────────────────────────────────────────────────────────────
+// ── Table block ───────────────────────────────────────────────────────────────
 
 function TableBlock({
-  block, onLinkPress,
+  block,
+  onLinkPress,
 }: {
   block: NotionBlock;
   onLinkPress: (url: string) => void;
@@ -96,35 +111,40 @@ function TableBlock({
   const rows = block.table_children ?? [];
   const hasColHeader = block.table?.has_column_header ?? false;
   const hasRowHeader = block.table?.has_row_header ?? false;
-  const colCount = block.table?.table_width ?? (rows[0]?.table_row?.cells.length ?? 0);
-
+  const colCount = block.table?.table_width ?? rows[0]?.table_row?.cells.length ?? 0;
   if (rows.length === 0) return null;
-
   return (
     <View style={styles.tableContainer}>
       {rows.map((row, rowIdx) => {
         const cells = row.table_row?.cells ?? [];
         const isColHeader = hasColHeader && rowIdx === 0;
-        const rowStyle = [
-          styles.tableRow,
-          isColHeader && styles.tableHeaderRow,
-          rowIdx > 0 && rowIdx % 2 === 0 && styles.tableRowAlt,
-        ];
         return (
-          <View key={row.id} style={rowStyle}>
+          <View
+            key={row.id}
+            style={[
+              styles.tableRow,
+              isColHeader && styles.tableHeaderRow,
+              rowIdx > 0 && rowIdx % 2 === 0 && styles.tableRowAlt,
+            ]}
+          >
             {cells.map((cell, cellIdx) => {
               const isRowHeader = hasRowHeader && cellIdx === 0;
-              const cellStyle = [
-                styles.tableCell,
-                cellIdx < colCount - 1 && styles.tableCellBorder,
-                isRowHeader && styles.tableRowHeaderCell,
-              ];
-              const textStyle: StyleProp<TextStyle> = isColHeader || isRowHeader
-                ? styles.tableHeaderText
-                : styles.tableCellText;
               return (
-                <View key={cellIdx} style={cellStyle}>
-                  <RichTextView richText={cell} style={textStyle} onLinkPress={onLinkPress} />
+                <View
+                  key={cellIdx}
+                  style={[
+                    styles.tableCell,
+                    cellIdx < colCount - 1 && styles.tableCellBorder,
+                    isRowHeader && styles.tableRowHeaderCell,
+                  ]}
+                >
+                  <RichTextView
+                    richText={cell}
+                    style={
+                      isColHeader || isRowHeader ? styles.tableHeaderText : styles.tableCellText
+                    }
+                    onLinkPress={onLinkPress}
+                  />
                 </View>
               );
             })}
@@ -135,7 +155,7 @@ function TableBlock({
   );
 }
 
-// ── Single block renderer ─────────────────────────────────────────────────────
+// ── Block renderer ────────────────────────────────────────────────────────────
 
 interface BlockViewProps {
   block: NotionBlock;
@@ -145,7 +165,13 @@ interface BlockViewProps {
   onOpenUrl: (url: string, title?: string) => void;
 }
 
-function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl }: BlockViewProps) {
+function BlockView({
+  block,
+  numberedIdx,
+  onNavigatePage,
+  onNavigateDb,
+  onOpenUrl,
+}: BlockViewProps) {
   const linkPress = (url: string) => onOpenUrl(url);
 
   switch (block.type) {
@@ -159,38 +185,58 @@ function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl
     case 'heading_1':
       return (
         <View style={styles.blockH1}>
-          <View style={styles.headingLine} />
-          <RichTextView richText={block.heading_1!.rich_text} style={styles.h1Text} onLinkPress={linkPress} />
+          <View style={styles.h1Line} />
+          <RichTextView
+            richText={block.heading_1!.rich_text}
+            style={styles.h1Text}
+            onLinkPress={linkPress}
+          />
         </View>
       );
 
     case 'heading_2':
       return (
         <View style={styles.blockH2}>
-          <RichTextView richText={block.heading_2!.rich_text} style={styles.h2Text} onLinkPress={linkPress} />
+          <RichTextView
+            richText={block.heading_2!.rich_text}
+            style={styles.h2Text}
+            onLinkPress={linkPress}
+          />
         </View>
       );
 
     case 'heading_3':
       return (
         <View style={styles.blockH3}>
-          <RichTextView richText={block.heading_3!.rich_text} style={styles.h3Text} onLinkPress={linkPress} />
+          <RichTextView
+            richText={block.heading_3!.rich_text}
+            style={styles.h3Text}
+            onLinkPress={linkPress}
+          />
         </View>
       );
 
     case 'bulleted_list_item':
       return (
         <View style={styles.listRow}>
-          <Text style={styles.bullet}>{'▸ '}</Text>
-          <RichTextView richText={block.bulleted_list_item!.rich_text} style={styles.listText} onLinkPress={linkPress} />
+          <View style={styles.bulletDot} />
+          <RichTextView
+            richText={block.bulleted_list_item!.rich_text}
+            style={styles.listText}
+            onLinkPress={linkPress}
+          />
         </View>
       );
 
     case 'numbered_list_item':
       return (
         <View style={styles.listRow}>
-          <Text style={styles.bullet}>{`${numberedIdx}. `}</Text>
-          <RichTextView richText={block.numbered_list_item!.rich_text} style={styles.listText} onLinkPress={linkPress} />
+          <Text style={styles.numberedBullet}>{numberedIdx}.</Text>
+          <RichTextView
+            richText={block.numbered_list_item!.rich_text}
+            style={styles.listText}
+            onLinkPress={linkPress}
+          />
         </View>
       );
 
@@ -198,9 +244,9 @@ function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl
       const checked = block.to_do!.checked;
       return (
         <View style={styles.listRow}>
-          <Text style={[styles.bullet, checked && styles.checkedBullet]}>
-            {checked ? '[✓] ' : '[ ] '}
-          </Text>
+          <View style={[styles.checkBox, checked && styles.checkBoxChecked]}>
+            {checked && <Text style={styles.checkMark}>✓</Text>}
+          </View>
           <RichTextView
             richText={block.to_do!.rich_text}
             style={[styles.listText, checked && styles.checkedText]}
@@ -213,8 +259,12 @@ function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl
     case 'toggle':
       return (
         <View style={styles.listRow}>
-          <Text style={styles.bullet}>{'▶ '}</Text>
-          <RichTextView richText={block.toggle!.rich_text} style={styles.listText} onLinkPress={linkPress} />
+          <Text style={styles.toggleIcon}>▶ </Text>
+          <RichTextView
+            richText={block.toggle!.rich_text}
+            style={styles.listText}
+            onLinkPress={linkPress}
+          />
         </View>
       );
 
@@ -223,7 +273,7 @@ function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl
       const lang = block.code!.language || '';
       return (
         <View style={styles.codeBlock}>
-          {lang ? <Text style={styles.codeLang}>{lang.toUpperCase()}</Text> : null}
+          {lang ? <Text style={styles.codeLang}>{lang}</Text> : null}
           <Text style={styles.codeText}>{code}</Text>
         </View>
       );
@@ -233,7 +283,11 @@ function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl
       return (
         <View style={styles.quoteBlock}>
           <View style={styles.quoteBorder} />
-          <RichTextView richText={block.quote!.rich_text} style={styles.quoteText} onLinkPress={linkPress} />
+          <RichTextView
+            richText={block.quote!.rich_text}
+            style={styles.quoteText}
+            onLinkPress={linkPress}
+          />
         </View>
       );
 
@@ -242,7 +296,11 @@ function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl
       return (
         <View style={styles.calloutBlock}>
           <Text style={styles.calloutIcon}>{icon}</Text>
-          <RichTextView richText={block.callout!.rich_text} style={styles.calloutText} onLinkPress={linkPress} />
+          <RichTextView
+            richText={block.callout!.rich_text}
+            style={styles.calloutText}
+            onLinkPress={linkPress}
+          />
         </View>
       );
     }
@@ -259,14 +317,9 @@ function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl
 
     case 'image': {
       const imgUrl =
-        block.image?.type === 'external'
-          ? block.image.external?.url
-          : block.image?.file?.url;
+        block.image?.type === 'external' ? block.image.external?.url : block.image?.file?.url;
       if (!imgUrl) return null;
-      const caption =
-        block.image?.caption?.length
-          ? richTextToPlain(block.image.caption)
-          : null;
+      const caption = block.image?.caption?.length ? richTextToPlain(block.image.caption) : null;
       return (
         <View style={styles.imageBlock}>
           <Image source={{ uri: imgUrl }} style={styles.image} resizeMode="contain" />
@@ -277,14 +330,14 @@ function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl
 
     case 'bookmark': {
       const url = block.bookmark!.url;
-      const cap = block.bookmark?.caption?.length
-        ? richTextToPlain(block.bookmark.caption)
-        : url;
+      const cap = block.bookmark?.caption?.length ? richTextToPlain(block.bookmark.caption) : url;
       return (
         <TouchableOpacity style={styles.bookmarkBlock} onPress={() => onOpenUrl(url, cap)}>
-          <Text style={styles.bookmarkIcon}>{'🔗'}</Text>
-          <Text style={styles.bookmarkUrl} numberOfLines={1}>{cap}</Text>
-          <Text style={styles.arrowText}>{' ›'}</Text>
+          <Text style={styles.bookmarkIcon}>🔗</Text>
+          <Text style={styles.bookmarkUrl} numberOfLines={1}>
+            {cap}
+          </Text>
+          <Text style={styles.arrowText}>›</Text>
         </TouchableOpacity>
       );
     }
@@ -293,9 +346,11 @@ function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl
       const url = block.link_preview!.url;
       return (
         <TouchableOpacity style={styles.bookmarkBlock} onPress={() => onOpenUrl(url)}>
-          <Text style={styles.bookmarkIcon}>{'🌐'}</Text>
-          <Text style={styles.bookmarkUrl} numberOfLines={1}>{url}</Text>
-          <Text style={styles.arrowText}>{' ›'}</Text>
+          <Text style={styles.bookmarkIcon}>🌐</Text>
+          <Text style={styles.bookmarkUrl} numberOfLines={1}>
+            {url}
+          </Text>
+          <Text style={styles.arrowText}>›</Text>
         </TouchableOpacity>
       );
     }
@@ -304,35 +359,40 @@ function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl
       const url = block.embed!.url;
       return (
         <TouchableOpacity style={styles.bookmarkBlock} onPress={() => onOpenUrl(url)}>
-          <Text style={styles.bookmarkIcon}>{'⊞'}</Text>
-          <Text style={styles.bookmarkUrl} numberOfLines={1}>{url}</Text>
-          <Text style={styles.arrowText}>{' ›'}</Text>
+          <Text style={styles.bookmarkIcon}>⊞</Text>
+          <Text style={styles.bookmarkUrl} numberOfLines={1}>
+            {url}
+          </Text>
+          <Text style={styles.arrowText}>›</Text>
         </TouchableOpacity>
       );
     }
 
     case 'child_page': {
-      const title = block.child_page!.title || '(PAGE)';
+      const title = block.child_page!.title || '(페이지)';
       return (
         <TouchableOpacity
-          style={styles.childPageRow}
-          onPress={() => onNavigatePage(block.id, title, '')}>
-          <Text style={styles.childIcon}>{'📄'}</Text>
-          <Text style={styles.childTitle} numberOfLines={1}>{title}</Text>
-          <Text style={styles.arrowText}>{' ›'}</Text>
+          style={styles.childRow}
+          onPress={() => onNavigatePage(block.id, title, '')}
+        >
+          <Text style={styles.childIcon}>📄</Text>
+          <Text style={styles.childTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={styles.arrowText}>›</Text>
         </TouchableOpacity>
       );
     }
 
     case 'child_database': {
-      const title = block.child_database!.title || '(DATABASE)';
+      const title = block.child_database!.title || '(데이터베이스)';
       return (
-        <TouchableOpacity
-          style={styles.childPageRow}
-          onPress={() => onNavigateDb(block.id, title)}>
-          <Text style={styles.childIcon}>{'🗄️'}</Text>
-          <Text style={styles.childTitle} numberOfLines={1}>{title}</Text>
-          <Text style={styles.arrowText}>{' ›'}</Text>
+        <TouchableOpacity style={styles.childRow} onPress={() => onNavigateDb(block.id, title)}>
+          <Text style={styles.childIcon}>🗄️</Text>
+          <Text style={styles.childTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={styles.arrowText}>›</Text>
         </TouchableOpacity>
       );
     }
@@ -342,7 +402,7 @@ function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl
   }
 }
 
-// ── Page tree helpers ─────────────────────────────────────────────────────────
+// ── Page tree ─────────────────────────────────────────────────────────────────
 
 interface PageTreeItem {
   page: NotionPageListItem;
@@ -351,11 +411,8 @@ interface PageTreeItem {
 }
 
 function buildPageTree(pages: NotionPageListItem[]): PageTreeItem[] {
-  // Only non-DB pages for the tree
   const nonDb = pages.filter(p => p.parentType !== 'database_id');
   const allIds = new Set(nonDb.map(p => p.id));
-
-  // Build child map
   const childMap = new Map<string, NotionPageListItem[]>();
   nonDb.forEach(p => {
     if (p.parentPageId && allIds.has(p.parentPageId)) {
@@ -364,15 +421,11 @@ function buildPageTree(pages: NotionPageListItem[]): PageTreeItem[] {
       childMap.set(p.parentPageId, arr);
     }
   });
-
-  // Root = workspace-level or parent not in our list
   const roots = nonDb.filter(
     p => p.parentType === 'workspace' || !p.parentPageId || !allIds.has(p.parentPageId),
   );
   roots.sort((a, b) => new Date(b.lastEdited).getTime() - new Date(a.lastEdited).getTime());
-
   const result: PageTreeItem[] = [];
-
   function dfs(p: NotionPageListItem, depth: number) {
     const children = (childMap.get(p.id) ?? []).sort(
       (a, b) => new Date(b.lastEdited).getTime() - new Date(a.lastEdited).getTime(),
@@ -380,54 +433,55 @@ function buildPageTree(pages: NotionPageListItem[]): PageTreeItem[] {
     result.push({ page: p, depth, hasChildren: children.length > 0 });
     children.forEach(c => dfs(c, depth + 1));
   }
-
   roots.forEach(p => dfs(p, 0));
   return result;
 }
 
-// ── DB property chips ─────────────────────────────────────────────────────────
+// ── Property chips ────────────────────────────────────────────────────────────
 
 function PropChips({ page }: { page: NotionPageListItem }) {
-  const chips: { label: string; color: string }[] = [];
+  const chips: { label: string; color: string; bg: string }[] = [];
 
   if (page.dateStart) {
     const d = new Date(page.dateStart);
     const now = new Date();
     const isToday = d.toDateString() === now.toDateString();
-    const isPast  = d < now && !isToday;
+    const isPast = d < now && !isToday;
+    const color = isPast ? COLORS.error : isToday ? COLORS.warning : COLORS.info;
     chips.push({
-      label: isToday ? 'TODAY' : `${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`,
-      color: isPast ? COLORS.red : isToday ? COLORS.amber : COLORS.cyan,
+      label: isToday
+        ? '오늘'
+        : `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`,
+      color,
+      bg: isPast ? COLORS.errorDim : isToday ? COLORS.warningDim : COLORS.infoDim,
     });
-    if (page.dateEnd) {
-      const e = new Date(page.dateEnd);
-      chips.push({
-        label: `→ ${String(e.getMonth()+1).padStart(2,'0')}.${String(e.getDate()).padStart(2,'0')}`,
-        color: COLORS.greenDim,
-      });
-    }
   }
-
   if (page.status) {
-    chips.push({ label: page.status.toUpperCase(), color: notionColor(page.statusColor) });
+    const c = notionColor(page.statusColor);
+    chips.push({ label: page.status, color: c, bg: 'rgba(255,255,255,0.05)' });
   }
-  if (page.priority) {
-    chips.push({ label: page.priority.toUpperCase(), color: notionColor(page.selectColor) });
-  } else if (page.select) {
-    chips.push({ label: page.select.toUpperCase(), color: notionColor(page.selectColor) });
+  if (page.priority || page.select) {
+    const label = (page.priority ?? page.select ?? '').toString();
+    const c = notionColor(page.selectColor);
+    chips.push({ label, color: c, bg: 'rgba(255,255,255,0.05)' });
   }
   if (page.checked !== undefined) {
-    chips.push({ label: page.checked ? '[✓]' : '[ ]', color: page.checked ? COLORS.greenBright : COLORS.greenDim });
+    chips.push({
+      label: page.checked ? '✓ 완료' : '미완료',
+      color: page.checked ? COLORS.success : COLORS.textHint,
+      bg: page.checked ? COLORS.successDim : 'rgba(255,255,255,0.04)',
+    });
   }
   if (page.tags?.length) {
-    page.tags.slice(0, 2).forEach(t => chips.push({ label: t.toUpperCase(), color: COLORS.greenDim }));
+    page.tags
+      .slice(0, 2)
+      .forEach(t => chips.push({ label: t, color: COLORS.accent, bg: COLORS.accentDim }));
   }
-
   if (chips.length === 0) return null;
   return (
     <View style={styles.chipsRow}>
       {chips.map((c, i) => (
-        <View key={i} style={[styles.chip, { borderColor: c.color }]}>
+        <View key={i} style={[styles.chip, { backgroundColor: c.bg }]}>
           <Text style={[styles.chipText, { color: c.color }]}>{c.label}</Text>
         </View>
       ))}
@@ -437,27 +491,25 @@ function PropChips({ page }: { page: NotionPageListItem }) {
 
 // ── Home view ─────────────────────────────────────────────────────────────────
 
-interface HomeViewProps {
+function HomeView({
+  onNavigatePage,
+  onNavigateDb,
+}: {
   onNavigatePage: (id: string, title: string, url: string) => void;
   onNavigateDb: (id: string, title: string) => void;
-}
-
-function HomeView({ onNavigatePage, onNavigateDb }: HomeViewProps) {
+}) {
   const { databases, pages, isLoading, error, fetch, forceRefresh } = useNotionStore();
   const lastFetched = useNotionStore(s => s.lastFetched);
 
-  useEffect(() => { fetch(); }, [fetch]);
-
-  const syncStr = lastFetched
-    ? new Date(lastFetched).toLocaleTimeString('en-GB', { hour12: false })
-    : null;
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
 
   if (isLoading && databases.length === 0 && pages.length === 0) {
     return (
       <View style={styles.centered}>
-        <PulseText style={styles.loadingText} duration={600}>
-          {'> CONNECTING TO NOTION...'}
-        </PulseText>
+        <ActivityIndicator color={COLORS.primaryLight} />
+        <Text style={styles.loadingText}>Notion 연결 중...</Text>
       </View>
     );
   }
@@ -465,60 +517,76 @@ function HomeView({ onNavigatePage, onNavigateDb }: HomeViewProps) {
   if (error && databases.length === 0) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{`> ERR: ${error}`}</Text>
+        <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity onPress={forceRefresh} style={styles.retryBtn}>
-          <Text style={styles.retryText}>{'[ RETRY ]'}</Text>
+          <Text style={styles.retryText}>다시 시도</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   const treeItems = buildPageTree(pages);
+  const syncStr = lastFetched
+    ? new Date(lastFetched).toLocaleTimeString('ko-KR', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-
-      {/* ── Databases ── */}
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Databases */}
       {databases.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeadRow}>
-            <Text style={styles.sectionHeader}>DATABASES</Text>
+            <View style={styles.sectionDot} />
+            <Text style={styles.sectionHeader}>데이터베이스</Text>
             <View style={styles.sectionLine} />
           </View>
           {databases.map(db => (
             <TouchableOpacity
               key={db.id}
               onPress={() => onNavigateDb(db.id, db.title)}
-              activeOpacity={0.7}
-              style={styles.dbRow}>
-              <Text style={styles.rowIcon}>{db.emoji ?? '▪'}</Text>
-              <Text style={styles.dbTitle} numberOfLines={1}>{db.title}</Text>
-              <Text style={styles.arrowText}>{' ›'}</Text>
+              activeOpacity={0.75}
+              style={styles.dbRow}
+            >
+              <Text style={styles.rowIcon}>{db.emoji ?? '🗄️'}</Text>
+              <Text style={styles.dbTitle} numberOfLines={1}>
+                {db.title}
+              </Text>
+              <Text style={styles.arrowText}>›</Text>
             </TouchableOpacity>
           ))}
         </View>
       )}
 
-      {/* ── Page tree ── */}
+      {/* Pages */}
       {treeItems.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeadRow}>
-            <Text style={styles.sectionHeader}>PAGES</Text>
+            <View style={styles.sectionDot} />
+            <Text style={styles.sectionHeader}>페이지</Text>
             <View style={styles.sectionLine} />
           </View>
           {treeItems.map(({ page, depth, hasChildren }) => {
             const indent = depth * 14;
-            const prefix = depth === 0 ? (page.emoji ?? '📄') : (hasChildren ? '├─ ' : '└─ ');
+            const prefix = depth === 0 ? page.emoji ?? '📄' : hasChildren ? '├─' : '└─';
             return (
               <TouchableOpacity
                 key={page.id}
                 onPress={() => onNavigatePage(page.id, page.title, page.url)}
-                activeOpacity={0.7}
-                style={[styles.pageRow, { paddingLeft: SPACING.xs + indent }]}>
+                activeOpacity={0.75}
+                style={[styles.pageRow, { paddingLeft: SPACING.sm + indent }]}
+              >
                 <Text style={[styles.rowIcon, depth > 0 && styles.treePrefix]}>{prefix}</Text>
-                <View style={styles.pageTitleCol}>
-                  <Text style={styles.pageTitle} numberOfLines={1}>{page.title}</Text>
-                </View>
+                <Text style={styles.pageTitle} numberOfLines={1}>
+                  {page.title}
+                </Text>
                 <Text style={styles.pageTime}>{formatRelativeTime(page.lastEdited)}</Text>
               </TouchableOpacity>
             );
@@ -527,13 +595,13 @@ function HomeView({ onNavigatePage, onNavigateDb }: HomeViewProps) {
       )}
 
       {databases.length === 0 && treeItems.length === 0 && (
-        <Text style={styles.noData}>{'> NO DATA\n> CHECK INTEGRATION PERMISSIONS'}</Text>
+        <Text style={styles.noData}>데이터 없음 — 통합 권한을 확인해주세요</Text>
       )}
 
       <View style={styles.footer}>
-        <Text style={styles.syncText}>{syncStr ? `SYNC: ${syncStr}` : 'NOT SYNCED'}</Text>
+        <Text style={styles.syncText}>{syncStr ? `업데이트 ${syncStr}` : '동기화 안됨'}</Text>
         <TouchableOpacity onPress={forceRefresh}>
-          <Text style={styles.refreshBtn}>{isLoading ? 'REFRESHING...' : '[↻ REFRESH]'}</Text>
+          <Text style={styles.refreshBtn}>{isLoading ? '업데이트 중...' : '↻ 새로고침'}</Text>
         </TouchableOpacity>
       </View>
       <View style={{ height: SPACING.lg }} />
@@ -543,72 +611,86 @@ function HomeView({ onNavigatePage, onNavigateDb }: HomeViewProps) {
 
 // ── Database view ─────────────────────────────────────────────────────────────
 
-interface DatabaseViewProps {
+function DatabaseView({
+  id,
+  onNavigatePage,
+}: {
   id: string;
   onNavigatePage: (id: string, title: string, url: string) => void;
-}
-
-function DatabaseView({ id, onNavigatePage }: DatabaseViewProps) {
-  const [pages, setPages]       = useState<NotionPageListItem[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
+}) {
+  const [pages, setPages] = useState<NotionPageListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
 
   const doFetch = useCallback(() => {
     queryDatabasePages(id)
-      .then(p => { setPages(p); setLastSync(new Date()); setError(null); })
-      .catch(e => setError(e instanceof Error ? e.message : 'FETCH ERROR'))
+      .then(p => {
+        setPages(p);
+        setLastSync(new Date());
+        setError(null);
+      })
+      .catch(e => setError(e instanceof Error ? e.message : '오류'))
       .finally(() => setLoading(false));
   }, [id]);
 
-  useEffect(() => { setLoading(true); doFetch(); }, [doFetch]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+    doFetch();
+  }, [doFetch]);
   useInterval(doFetch, DB_POLL_INTERVAL);
 
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator color={COLORS.green} />
-        <Text style={styles.loadingText}>{'> QUERYING DATABASE...'}</Text>
+        <ActivityIndicator color={COLORS.primaryLight} />
+        <Text style={styles.loadingText}>데이터베이스 조회 중...</Text>
       </View>
     );
   }
-
   if (error) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{`> ERR: ${error.toUpperCase()}`}</Text>
+        <Text style={styles.errorText}>{error}</Text>
       </View>
     );
   }
-
   if (pages.length === 0) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.noData}>{'> NO ENTRIES FOUND'}</Text>
+        <Text style={styles.noData}>항목 없음</Text>
       </View>
     );
   }
 
-  const syncStr = lastSync ? lastSync.toLocaleTimeString('en-GB', { hour12: false }) : null;
-
+  const syncStr = lastSync
+    ? lastSync.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' })
+    : null;
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.dbViewHeader}>
-        <Text style={styles.sectionHeader}>{`${pages.length} ENTRIES`}</Text>
-        {syncStr && <Text style={styles.syncText}>{`SYNC: ${syncStr}`}</Text>}
+        <Text style={styles.sectionHeader}>{pages.length}개 항목</Text>
+        {syncStr && <Text style={styles.syncText}>업데이트 {syncStr}</Text>}
       </View>
       {pages.map((page, idx) => (
         <TouchableOpacity
           key={page.id}
           onPress={() => onNavigatePage(page.id, page.title, page.url)}
-          activeOpacity={0.7}
-          style={[styles.dbEntryRow, idx % 2 === 1 && styles.dbEntryRowAlt]}>
-          {/* Index + emoji/icon */}
+          activeOpacity={0.75}
+          style={[styles.dbEntryRow, idx % 2 === 1 && styles.dbEntryRowAlt]}
+        >
           <Text style={styles.dbEntryIdx}>{String(idx + 1).padStart(2, '0')}</Text>
           <View style={styles.dbEntryContent}>
             <View style={styles.dbEntryTitleRow}>
               {page.emoji ? <Text style={styles.dbEntryEmoji}>{page.emoji}</Text> : null}
-              <Text style={styles.dbEntryTitle} numberOfLines={1}>{page.title}</Text>
+              <Text style={styles.dbEntryTitle} numberOfLines={1}>
+                {page.title}
+              </Text>
               <Text style={styles.pageTime}>{formatRelativeTime(page.lastEdited)}</Text>
             </View>
             <PropChips page={page} />
@@ -622,46 +704,60 @@ function DatabaseView({ id, onNavigatePage }: DatabaseViewProps) {
 
 // ── Page view ─────────────────────────────────────────────────────────────────
 
-interface PageViewProps {
+function PageView({
+  id,
+  url: pageUrl,
+  onNavigatePage,
+  onNavigateDb,
+  onOpenUrl,
+}: {
   id: string;
   url: string;
   onNavigatePage: (id: string, title: string, url: string) => void;
   onNavigateDb: (id: string, title: string) => void;
   onOpenUrl: (url: string, title?: string) => void;
-}
-
-function PageView({ id, url: pageUrl, onNavigatePage, onNavigateDb, onOpenUrl }: PageViewProps) {
-  const [blocks, setBlocks]     = useState<NotionBlock[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
+}) {
+  const [blocks, setBlocks] = useState<NotionBlock[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
 
   const doFetch = useCallback(() => {
     fetchPageBlocks(id)
-      .then(b => { setBlocks(b); setLastSync(new Date()); setError(null); })
-      .catch(e => setError(e instanceof Error ? e.message : 'FETCH ERROR'))
+      .then(b => {
+        setBlocks(b);
+        setLastSync(new Date());
+        setError(null);
+      })
+      .catch(e => setError(e instanceof Error ? e.message : '오류'))
       .finally(() => setLoading(false));
   }, [id]);
 
-  useEffect(() => { setLoading(true); doFetch(); }, [doFetch]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+    doFetch();
+  }, [doFetch]);
   useInterval(doFetch, PAGE_POLL_INTERVAL);
 
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator color={COLORS.green} />
-        <Text style={styles.loadingText}>{'> LOADING PAGE...'}</Text>
+        <ActivityIndicator color={COLORS.primaryLight} />
+        <Text style={styles.loadingText}>페이지 불러오는 중...</Text>
       </View>
     );
   }
-
   if (error) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{`> ERR: ${error.toUpperCase()}`}</Text>
+        <Text style={styles.errorText}>{error}</Text>
         {pageUrl ? (
-          <TouchableOpacity style={styles.retryBtn} onPress={() => onOpenUrl(pageUrl, 'NOTION PAGE')}>
-            <Text style={styles.retryText}>{'[ OPEN IN BROWSER ]'}</Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => onOpenUrl(pageUrl, 'Notion 페이지')}
+          >
+            <Text style={styles.retryText}>브라우저에서 열기</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -678,12 +774,20 @@ function PageView({ id, url: pageUrl, onNavigatePage, onNavigateDb, onOpenUrl }:
     return idx;
   });
 
-  const syncStr = lastSync ? lastSync.toLocaleTimeString('en-GB', { hour12: false }) : null;
-
+  const syncStr = lastSync
+    ? lastSync.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' })
+    : null;
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
       {syncStr && (
-        <Text style={styles.pageSyncText}>{`◎ LIVE · SYNC: ${syncStr}`}</Text>
+        <View style={styles.liveBanner}>
+          <View style={styles.liveDot} />
+          <Text style={styles.liveBannerText}>실시간 · {syncStr}</Text>
+        </View>
       )}
       {blocks.map((block, i) => (
         <BlockView
@@ -695,9 +799,7 @@ function PageView({ id, url: pageUrl, onNavigatePage, onNavigateDb, onOpenUrl }:
           onOpenUrl={onOpenUrl}
         />
       ))}
-      {blocks.length === 0 && (
-        <Text style={styles.noData}>{'> EMPTY PAGE'}</Text>
-      )}
+      {blocks.length === 0 && <Text style={styles.noData}>빈 페이지</Text>}
       <View style={{ height: SPACING.xl }} />
     </ScrollView>
   );
@@ -718,39 +820,48 @@ export default function NotionWidget() {
     setViewStack(prev => (prev.length > 1 ? prev.slice(0, -1) : prev));
   };
 
-  const onNavigatePage = useCallback((id: string, title: string, url: string) => {
-    pushView({ kind: 'page', id, title, url });
-  }, [pushView]);
+  const onNavigatePage = useCallback(
+    (id: string, title: string, url: string) => {
+      pushView({ kind: 'page', id, title, url });
+    },
+    [pushView],
+  );
 
-  const onNavigateDb = useCallback((id: string, title: string) => {
-    pushView({ kind: 'database', id, title });
-  }, [pushView]);
+  const onNavigateDb = useCallback(
+    (id: string, title: string) => {
+      pushView({ kind: 'database', id, title });
+    },
+    [pushView],
+  );
 
-  const onOpenUrl = useCallback((url: string, title?: string) => {
-    if (!url) return;
-    nav.navigate('WebView', { url, title: title ?? url });
-  }, [nav]);
+  const onOpenUrl = useCallback(
+    (url: string, title?: string) => {
+      if (!url) return;
+      nav.navigate('WebView', { url, title: title ?? url });
+    },
+    [nav],
+  );
+
+  const titleRight =
+    currentView.kind === 'home' ? undefined : currentView.kind === 'database' ? 'DB' : 'PAGE';
 
   const breadLabel = viewStack
     .slice(1)
-    .map(v => (v.kind === 'home' ? '' : v.title.toUpperCase()))
+    .map(v => (v.kind === 'home' ? '' : v.title))
     .join(' › ');
 
-  const titleRight =
-    currentView.kind === 'home' ? undefined :
-    currentView.kind === 'database' ? 'DB' : 'PAGE';
-
   return (
-    <GlowBox title="◈ NOTION::SYNC" titleRight={titleRight} style={styles.box} noPadding>
+    <GlowBox title="Notion" titleRight={titleRight} style={styles.box} noPadding>
       {viewStack.length > 1 && (
         <View style={styles.breadcrumb}>
           <TouchableOpacity onPress={popView} style={styles.backBtn}>
-            <Text style={styles.backText}>{'← BACK'}</Text>
+            <Text style={styles.backText}>← 뒤로</Text>
           </TouchableOpacity>
-          <Text style={styles.breadLabel} numberOfLines={1}>{breadLabel}</Text>
+          <Text style={styles.breadLabel} numberOfLines={1}>
+            {breadLabel}
+          </Text>
         </View>
       )}
-
       {currentView.kind === 'home' && (
         <HomeView onNavigatePage={onNavigatePage} onNavigateDb={onNavigateDb} />
       )}
@@ -771,155 +882,425 @@ export default function NotionWidget() {
 }
 
 // ── Annotation styles ─────────────────────────────────────────────────────────
+
 const annotStyles = {
-  bold:   { fontWeight: '700' } as TextStyle,
+  bold: { fontWeight: '700' } as TextStyle,
   italic: { fontStyle: 'italic' } as TextStyle,
   strike: { textDecorationLine: 'line-through' } as TextStyle,
-  code:   { backgroundColor: 'rgba(0,255,65,0.12)', color: COLORS.cyan } as TextStyle,
+  code: {
+    backgroundColor: COLORS.primarySurface,
+    color: COLORS.primaryLighter,
+    fontFamily: FONTS.mono,
+  } as TextStyle,
 };
 
 // ── Styles ────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   box: { flex: 1 },
   scroll: { flex: 1 },
-  scrollContent: { padding: SPACING.sm },
-  centered: { flex: 1, padding: SPACING.md, justifyContent: 'center' },
+  scrollContent: { padding: SPACING.md },
+  centered: { flex: 1, padding: SPACING.lg, justifyContent: 'center', alignItems: 'center' },
 
-  // Section head
-  sectionHeadRow: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.xs },
-  sectionHeader: {
-    fontFamily: FONTS.mono, color: COLORS.greenFaint,
-    fontSize: FONTS.sizes.xs, letterSpacing: 2, marginRight: 6,
+  loadingText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textHint,
+    fontSize: FONTS.sizes.sm,
+    marginTop: SPACING.sm,
   },
-  sectionLine: { flex: 1, height: 1, backgroundColor: COLORS.greenFaint, opacity: 0.35 },
+  errorText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.error,
+    fontSize: FONTS.sizes.sm,
+    marginBottom: SPACING.sm,
+    textAlign: 'center',
+  },
+  noData: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textHint,
+    fontSize: FONTS.sizes.sm,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    backgroundColor: COLORS.primarySurface,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  retryText: {
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.primaryLighter,
+    fontSize: FONTS.sizes.xs,
+    fontWeight: '600',
+  },
 
-  section: { marginBottom: SPACING.sm },
+  // Section header
+  sectionHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  sectionDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primaryLight },
+  sectionHeader: {
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.accent,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  sectionLine: { flex: 1, height: 1, backgroundColor: COLORS.divider },
+  section: { marginBottom: SPACING.md },
 
   // Breadcrumb
   breadcrumb: {
-    flexDirection: 'row', alignItems: 'center',
-    borderBottomWidth: 1, borderBottomColor: COLORS.greenFaint,
-    paddingHorizontal: SPACING.sm, paddingVertical: 5,
-    backgroundColor: 'rgba(0,255,65,0.03)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.surfaceElevated,
+    gap: SPACING.sm,
   },
-  backBtn:   { marginRight: SPACING.sm },
-  backText:  { fontFamily: FONTS.mono, color: COLORS.amber, fontSize: FONTS.sizes.xs, letterSpacing: 1 },
-  breadLabel:{ fontFamily: FONTS.mono, color: COLORS.greenDim, fontSize: FONTS.sizes.xs, flex: 1, letterSpacing: 0.5 },
+  backBtn: {
+    backgroundColor: COLORS.primarySurface,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  backText: {
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.primaryLighter,
+    fontSize: FONTS.sizes.xs,
+    fontWeight: '600',
+  },
+  breadLabel: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textSecondary,
+    fontSize: FONTS.sizes.xs,
+    flex: 1,
+  },
 
-  // Feedback states
-  loadingText: { fontFamily: FONTS.mono, color: COLORS.amber, fontSize: FONTS.sizes.sm, marginTop: 8 },
-  errorText:   { fontFamily: FONTS.mono, color: COLORS.red, fontSize: FONTS.sizes.sm, marginBottom: SPACING.sm },
-  noData:      { fontFamily: FONTS.mono, color: COLORS.greenDim, fontSize: FONTS.sizes.xs, lineHeight: 20 },
-  retryBtn:    { borderWidth: 1, borderColor: COLORS.amber, paddingHorizontal: SPACING.sm, paddingVertical: 3, alignSelf: 'flex-start' },
-  retryText:   { fontFamily: FONTS.mono, color: COLORS.amber, fontSize: FONTS.sizes.xs },
-
-  // Database list rows
+  // Database list
   dbRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 5, paddingHorizontal: 4,
-    borderLeftWidth: 2, borderLeftColor: COLORS.greenFaint,
-    marginBottom: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.sm,
+    marginBottom: SPACING.xs,
+    backgroundColor: COLORS.surfaceElevated,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: SPACING.sm,
   },
-  dbTitle: { fontFamily: FONTS.mono, color: COLORS.greenBright, fontSize: FONTS.sizes.sm, flex: 1, letterSpacing: 0.5 },
+  dbTitle: {
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.textPrimary,
+    fontSize: FONTS.sizes.sm,
+    flex: 1,
+    fontWeight: '500',
+  },
 
-  // Page tree rows
-  pageRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 4, marginBottom: 2 },
-  pageTitleCol: { flex: 1 },
-  pageTitle:    { fontFamily: FONTS.mono, color: COLORS.green, fontSize: FONTS.sizes.xs, letterSpacing: 0.5 },
-  pageTime:     { fontFamily: FONTS.mono, color: COLORS.greenFaint, fontSize: FONTS.sizes.xs, letterSpacing: 0.5, marginLeft: 4 },
-  rowIcon:      { fontSize: 14, marginRight: 6, width: 22 },
-  treePrefix:   { fontFamily: FONTS.mono, color: COLORS.greenFaint, fontSize: FONTS.sizes.xs, width: 22 },
-  arrowText:    { fontFamily: FONTS.mono, color: COLORS.greenDim, fontSize: FONTS.sizes.md },
+  // Page tree
+  pageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingRight: SPACING.sm,
+    marginBottom: 2,
+    borderRadius: RADIUS.sm,
+    gap: SPACING.xs,
+  },
+  pageTitle: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textSecondary,
+    fontSize: FONTS.sizes.xs,
+    flex: 1,
+  },
+  pageTime: { fontFamily: FONTS.sans, color: COLORS.textHint, fontSize: 11 },
+  rowIcon: { fontSize: 14, width: 22, textAlign: 'center' },
+  treePrefix: { fontFamily: FONTS.mono, color: COLORS.textHint, fontSize: 11, width: 22 },
+  arrowText: { fontFamily: FONTS.sans, color: COLORS.textHint, fontSize: FONTS.sizes.md },
 
-  // Database entry rows
+  // Database entry
   dbViewHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: SPACING.xs, borderBottomWidth: 1, borderBottomColor: COLORS.greenFaint, paddingBottom: 4,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+    paddingBottom: SPACING.sm,
   },
   dbEntryRow: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    paddingVertical: 5, paddingHorizontal: 4,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(0,255,65,0.08)',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+    gap: SPACING.sm,
   },
-  dbEntryRowAlt: { backgroundColor: 'rgba(0,255,65,0.03)' },
-  dbEntryIdx:   { fontFamily: FONTS.mono, color: COLORS.greenFaint, fontSize: 10, width: 20, marginTop: 2 },
+  dbEntryRowAlt: { backgroundColor: COLORS.surfaceElevated },
+  dbEntryIdx: {
+    fontFamily: FONTS.mono,
+    color: COLORS.textHint,
+    fontSize: 11,
+    width: 22,
+    marginTop: 2,
+  },
   dbEntryContent: { flex: 1 },
-  dbEntryTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
-  dbEntryEmoji: { fontSize: 12, marginRight: 4 },
-  dbEntryTitle: { fontFamily: FONTS.mono, color: COLORS.green, fontSize: FONTS.sizes.xs, flex: 1, letterSpacing: 0.5 },
+  dbEntryTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, gap: 4 },
+  dbEntryEmoji: { fontSize: 13 },
+  dbEntryTitle: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textPrimary,
+    fontSize: FONTS.sizes.sm,
+    flex: 1,
+    fontWeight: '500',
+  },
 
   // Property chips
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 },
-  chip: { borderWidth: 1, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 2 },
-  chipText: { fontFamily: FONTS.mono, fontSize: 9, letterSpacing: 0.5 },
+  chip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: RADIUS.sm },
+  chipText: { fontFamily: FONTS.sansMedium, fontSize: 10, fontWeight: '600' },
 
   // Footer
-  footer:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: SPACING.sm, paddingTop: SPACING.xs, borderTopWidth: 1, borderTopColor: COLORS.greenFaint },
-  syncText:   { fontFamily: FONTS.mono, color: COLORS.greenFaint, fontSize: FONTS.sizes.xs, letterSpacing: 1 },
-  refreshBtn: { fontFamily: FONTS.mono, color: COLORS.greenDim, fontSize: FONTS.sizes.xs, letterSpacing: 1 },
-
-  // Page sync indicator
-  pageSyncText: {
-    fontFamily: FONTS.mono, color: COLORS.greenFaint, fontSize: FONTS.sizes.xs,
-    letterSpacing: 1, marginBottom: SPACING.xs,
-    borderBottomWidth: 1, borderBottomColor: COLORS.greenFaint, paddingBottom: 4,
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: SPACING.md,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.divider,
+  },
+  syncText: { fontFamily: FONTS.sans, color: COLORS.textHint, fontSize: 11 },
+  refreshBtn: {
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.primaryLighter,
+    fontSize: 12,
+    fontWeight: '600',
   },
 
+  // Live banner
+  liveBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+    gap: SPACING.xs,
+  },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.success },
+  liveBannerText: { fontFamily: FONTS.sans, color: COLORS.textHint, fontSize: 11 },
+
   // Block: base text
-  baseText: { fontFamily: FONTS.mono, color: COLORS.green, fontSize: FONTS.sizes.xs, lineHeight: 20 },
-  link:     { color: COLORS.cyan, textDecorationLine: 'underline' },
+  baseText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textSecondary,
+    fontSize: FONTS.sizes.sm,
+    lineHeight: 22,
+  },
+  link: { color: COLORS.primaryLighter, textDecorationLine: 'underline' },
 
-  blockParagraph: { marginBottom: SPACING.xs },
+  blockParagraph: { marginBottom: SPACING.sm },
 
-  blockH1: { marginBottom: SPACING.sm, marginTop: SPACING.xs },
-  headingLine: { height: 1, backgroundColor: COLORS.greenFaint, marginBottom: 4 },
-  h1Text: { color: COLORS.greenBright, fontSize: FONTS.sizes.md, fontWeight: 'bold', letterSpacing: 1 },
-  blockH2: { marginBottom: SPACING.xs, marginTop: SPACING.xs },
-  h2Text: { color: COLORS.greenBright, fontSize: FONTS.sizes.sm, fontWeight: 'bold', letterSpacing: 0.5 },
+  blockH1: { marginBottom: SPACING.md, marginTop: SPACING.sm },
+  h1Line: { height: 2, backgroundColor: COLORS.primary, marginBottom: SPACING.xs, borderRadius: 1 },
+  h1Text: {
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.textPrimary,
+    fontSize: FONTS.sizes.lg,
+    fontWeight: '700',
+  },
+  blockH2: { marginBottom: SPACING.sm, marginTop: SPACING.sm },
+  h2Text: {
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.textPrimary,
+    fontSize: FONTS.sizes.md,
+    fontWeight: '700',
+  },
   blockH3: { marginBottom: SPACING.xs },
-  h3Text: { color: COLORS.green, fontSize: FONTS.sizes.sm, fontWeight: '600' },
+  h3Text: {
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.textSecondary,
+    fontSize: FONTS.sizes.sm,
+    fontWeight: '700',
+  },
 
-  listRow:       { flexDirection: 'row', marginBottom: 3, paddingLeft: 4 },
-  bullet:        { fontFamily: FONTS.mono, color: COLORS.greenDim, fontSize: FONTS.sizes.xs, minWidth: 20 },
-  listText:      {},
-  checkedBullet: { color: COLORS.greenFaint },
-  checkedText:   { textDecorationLine: 'line-through', color: COLORS.greenFaint },
+  listRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+    paddingLeft: SPACING.xs,
+    alignItems: 'flex-start',
+    gap: SPACING.xs,
+  },
+  bulletDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: COLORS.primaryLight,
+    marginTop: 8,
+    flexShrink: 0,
+  },
+  numberedBullet: {
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.primaryLight,
+    fontSize: FONTS.sizes.sm,
+    minWidth: 20,
+    fontWeight: '600',
+  },
+  toggleIcon: { fontFamily: FONTS.sans, color: COLORS.textHint, fontSize: FONTS.sizes.sm },
+  listText: {},
+  checkBox: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    marginTop: 3,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkBoxChecked: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  checkMark: { color: COLORS.white, fontSize: 10, fontWeight: '700' },
+  checkedText: { textDecorationLine: 'line-through', color: COLORS.textHint },
 
-  codeBlock: { backgroundColor: 'rgba(0,255,65,0.06)', borderWidth: 1, borderColor: COLORS.greenFaint, padding: SPACING.xs, marginBottom: SPACING.xs, borderRadius: 2 },
-  codeLang:  { fontFamily: FONTS.mono, color: COLORS.greenFaint, fontSize: FONTS.sizes.xs, letterSpacing: 1, marginBottom: 2 },
-  codeText:  { fontFamily: FONTS.mono, color: COLORS.cyan, fontSize: FONTS.sizes.xs, lineHeight: 18 },
+  codeBlock: {
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADIUS.sm,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primaryLight,
+  },
+  codeLang: {
+    fontFamily: FONTS.mono,
+    color: COLORS.accent,
+    fontSize: 10,
+    marginBottom: SPACING.xs,
+    letterSpacing: 0.5,
+  },
+  codeText: {
+    fontFamily: FONTS.mono,
+    color: COLORS.primaryLighter,
+    fontSize: FONTS.sizes.xs,
+    lineHeight: 18,
+  },
 
-  quoteBlock:  { flexDirection: 'row', marginBottom: SPACING.xs, marginLeft: 4 },
-  quoteBorder: { width: 2, backgroundColor: COLORS.greenDim, marginRight: SPACING.xs },
-  quoteText:   { color: COLORS.greenDim, fontStyle: 'italic', flex: 1 },
+  quoteBlock: { flexDirection: 'row', marginBottom: SPACING.sm, marginLeft: 4 },
+  quoteBorder: {
+    width: 3,
+    backgroundColor: COLORS.primary,
+    marginRight: SPACING.sm,
+    borderRadius: 2,
+  },
+  quoteText: { color: COLORS.textSecondary, fontStyle: 'italic', flex: 1 },
 
-  calloutBlock: { flexDirection: 'row', backgroundColor: 'rgba(0,255,65,0.06)', borderWidth: 1, borderColor: COLORS.greenFaint, padding: SPACING.xs, marginBottom: SPACING.xs, borderRadius: 2 },
-  calloutIcon:  { fontSize: 16, marginRight: SPACING.xs },
-  calloutText:  { flex: 1 },
+  calloutBlock: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.primarySurface,
+    borderRadius: RADIUS.sm,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: SPACING.sm,
+  },
+  calloutIcon: { fontSize: 16 },
+  calloutText: { flex: 1 },
 
-  dividerBlock: { height: 1, backgroundColor: COLORS.greenFaint, marginVertical: SPACING.sm, opacity: 0.5 },
+  dividerBlock: { height: 1, backgroundColor: COLORS.divider, marginVertical: SPACING.md },
 
-  // Table
-  tableWrapper:   { marginBottom: SPACING.sm },
-  tableContainer: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 2, overflow: 'hidden' },
-  tableRow:        { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: 'rgba(0,255,65,0.15)' },
-  tableHeaderRow:  { backgroundColor: 'rgba(0,255,65,0.10)' },
-  tableRowAlt:     { backgroundColor: 'rgba(0,255,65,0.03)' },
-  tableCell:       { flex: 1, padding: 5, justifyContent: 'center' },
-  tableCellBorder: { borderRightWidth: 1, borderRightColor: 'rgba(0,255,65,0.15)' },
-  tableRowHeaderCell: { backgroundColor: 'rgba(0,255,65,0.07)' },
-  tableCellText:   { fontFamily: FONTS.mono, color: COLORS.green, fontSize: FONTS.sizes.xs, lineHeight: 18 },
-  tableHeaderText: { fontFamily: FONTS.mono, color: COLORS.greenBright, fontSize: FONTS.sizes.xs, fontWeight: '700', letterSpacing: 0.5 },
+  tableWrapper: { marginBottom: SPACING.md },
+  tableContainer: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.sm,
+    overflow: 'hidden',
+  },
+  tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  tableHeaderRow: { backgroundColor: COLORS.primarySurface },
+  tableRowAlt: { backgroundColor: COLORS.surfaceElevated },
+  tableCell: { flex: 1, padding: 6, justifyContent: 'center' },
+  tableCellBorder: { borderRightWidth: 1, borderRightColor: COLORS.divider },
+  tableRowHeaderCell: { backgroundColor: COLORS.surfaceElevated },
+  tableCellText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textSecondary,
+    fontSize: FONTS.sizes.xs,
+    lineHeight: 18,
+  },
+  tableHeaderText: {
+    fontFamily: FONTS.sansMedium,
+    color: COLORS.textPrimary,
+    fontSize: FONTS.sizes.xs,
+    fontWeight: '700',
+  },
 
-  imageBlock:   { marginBottom: SPACING.sm },
-  image:        { width: '100%', height: 120, backgroundColor: 'rgba(0,255,65,0.04)' },
-  imageCaption: { fontFamily: FONTS.mono, color: COLORS.greenFaint, fontSize: FONTS.sizes.xs, textAlign: 'center', marginTop: 3 },
+  imageBlock: { marginBottom: SPACING.md },
+  image: {
+    width: '100%',
+    height: 140,
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADIUS.sm,
+  },
+  imageCaption: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textHint,
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 4,
+  },
 
-  bookmarkBlock: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: COLORS.greenFaint, padding: SPACING.xs, marginBottom: SPACING.xs, borderRadius: 2 },
-  bookmarkIcon:  { fontSize: 14, marginRight: SPACING.xs },
-  bookmarkUrl:   { flex: 1, fontFamily: FONTS.mono, color: COLORS.cyan, fontSize: FONTS.sizes.xs, letterSpacing: 0.3 },
+  bookmarkBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADIUS.sm,
+    padding: SPACING.sm,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: SPACING.sm,
+  },
+  bookmarkIcon: { fontSize: 14 },
+  bookmarkUrl: {
+    flex: 1,
+    fontFamily: FONTS.sans,
+    color: COLORS.primaryLighter,
+    fontSize: FONTS.sizes.xs,
+  },
 
-  childPageRow:  { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 4, borderLeftWidth: 2, borderLeftColor: COLORS.green, marginBottom: 3 },
-  childIcon:     { fontSize: 14, marginRight: 6 },
-  childTitle:    { flex: 1, fontFamily: FONTS.mono, color: COLORS.greenBright, fontSize: FONTS.sizes.xs },
+  childRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.sm,
+    marginBottom: 4,
+    backgroundColor: COLORS.surfaceElevated,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: SPACING.sm,
+  },
+  childIcon: { fontSize: 14 },
+  childTitle: {
+    flex: 1,
+    fontFamily: FONTS.sans,
+    color: COLORS.textPrimary,
+    fontSize: FONTS.sizes.sm,
+    fontWeight: '500',
+  },
 });

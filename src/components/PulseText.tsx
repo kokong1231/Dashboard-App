@@ -23,14 +23,11 @@ export default function PulseText({ children, style, duration = 600 }: PulseText
 
   useEffect(() => {
     opacity.value = withRepeat(
-      withSequence(
-        withTiming(0.15, { duration }),
-        withTiming(1, { duration }),
-      ),
+      withSequence(withTiming(0.15, { duration }), withTiming(1, { duration })),
       -1,
       false,
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));

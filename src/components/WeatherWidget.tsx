@@ -1,5 +1,12 @@
 import React, { useEffect } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useWeatherStore } from '@/store/useWeatherStore';
 import {
   formatTemp,
@@ -10,31 +17,27 @@ import {
   windDegToDir,
 } from '@/utils/formatters';
 import GlowBox from './GlowBox';
-import PulseText from './PulseText';
-import { COLORS, FONTS, SPACING } from '@/theme';
+import { COLORS, FONTS, RADIUS, SPACING } from '@/theme';
 
-const DAY_NAMES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-function Row({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
+function StatChip({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <View style={styles.row}>
-      <Text style={styles.label}>{label}</Text>
-      <Text
-        style={[styles.value, valueColor ? { color: valueColor } : null]}
-        numberOfLines={1}
-        adjustsFontSizeToFit>
-        {value}
-      </Text>
+    <View style={styles.statChip}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statValue, color ? { color } : null]}>{value}</Text>
     </View>
   );
 }
 
-function SectionTitle({ text }: { text: string }) {
-  return <Text style={styles.sectionTitle}>{text}</Text>;
-}
-
-function Divider() {
-  return <View style={styles.divider} />;
+function SectionLabel({ text }: { text: string }) {
+  return (
+    <View style={styles.sectionLabelRow}>
+      <View style={styles.sectionLabelDot} />
+      <Text style={styles.sectionLabelText}>{text}</Text>
+      <View style={styles.sectionLabelLine} />
+    </View>
+  );
 }
 
 export default function WeatherWidget() {
@@ -45,27 +48,33 @@ export default function WeatherWidget() {
   }, [fetch]);
 
   const lastSyncStr = lastFetched
-    ? new Date(lastFetched).toLocaleTimeString('en-GB', { hour12: false })
-    : '--:--:--';
+    ? new Date(lastFetched).toLocaleTimeString('ko-KR', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '--:--';
 
   if (isLoading && !data) {
     return (
-      <GlowBox title="◈ WEATHER_SYS" style={styles.box}>
-        <PulseText style={styles.loading} duration={600}>
-          {'> ACQUIRING DATA...'}
-        </PulseText>
+      <GlowBox title="날씨" style={styles.box}>
+        <View style={styles.centered}>
+          <ActivityIndicator color={COLORS.primaryLight} size="small" />
+          <Text style={styles.loadingText}>날씨 불러오는 중...</Text>
+        </View>
       </GlowBox>
     );
   }
 
   if (error && !data) {
     return (
-      <GlowBox title="◈ WEATHER_SYS" style={styles.box}>
-        <Text style={styles.error}>{`> ERR: ${error}`}</Text>
+      <GlowBox title="날씨" style={styles.box}>
+        <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity
           onPress={() => useWeatherStore.setState({ lastFetched: null })}
-          style={styles.retryBtn}>
-          <Text style={styles.retryText}>[RETRY]</Text>
+          style={styles.retryBtn}
+        >
+          <Text style={styles.retryText}>다시 시도</Text>
         </TouchableOpacity>
       </GlowBox>
     );
@@ -73,8 +82,8 @@ export default function WeatherWidget() {
 
   if (!data) {
     return (
-      <GlowBox title="◈ WEATHER_SYS" style={styles.box}>
-        <Text style={styles.dimText}>{'> NO DATA'}</Text>
+      <GlowBox title="날씨" style={styles.box}>
+        <Text style={styles.hintText}>데이터 없음</Text>
       </GlowBox>
     );
   }
@@ -84,7 +93,6 @@ export default function WeatherWidget() {
   const weatherEmoji = weatherCodeToEmoji(current.weather_code);
   const windDir = windDegToDir(current.wind_direction_10m);
 
-  // Next 6 hours forecast
   const nowH = new Date().getHours();
   const forecastSlice = hourly.time
     .map((t, i) => ({
@@ -98,118 +106,111 @@ export default function WeatherWidget() {
     })
     .slice(0, 6);
 
-  // 7-day daily forecast
   const weekForecast = daily.time.map((dateStr, i) => {
     const d = new Date(dateStr);
-    const dayName = DAY_NAMES[d.getDay()];
-    const isToday = i === 0;
     return {
-      dayName: isToday ? 'TODAY' : dayName,
-      dateStr,
+      dayName: i === 0 ? '오늘' : DAY_NAMES[d.getDay()],
       emoji: weatherCodeToEmoji(daily.weather_code[i]),
       max: daily.temperature_2m_max[i],
       min: daily.temperature_2m_min[i],
       precip: daily.precipitation_probability_max[i] ?? 0,
-      isToday,
+      isToday: i === 0,
     };
   });
 
+  const uvColor =
+    current.uv_index >= 8 ? COLORS.error : current.uv_index >= 6 ? COLORS.warning : COLORS.success;
+
   return (
-    <GlowBox title="◈ WEATHER_SYS" titleRight={isLoading ? 'UPDATING...' : undefined} style={styles.box}>
+    <GlowBox title="날씨" titleRight={isLoading ? '업데이트 중' : undefined} style={styles.box}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* ── Hero ── */}
-        <View style={styles.heroRow}>
-          <Text style={styles.emoji}>{weatherEmoji}</Text>
-          <Text style={styles.condLabel}>{condLabel}</Text>
+        {/* Hero */}
+        <View style={styles.heroCard}>
+          <Text style={styles.heroEmoji}>{weatherEmoji}</Text>
+          <View style={styles.heroInfo}>
+            <Text style={styles.heroTemp}>{formatTemp(current.temperature_2m)}</Text>
+            <Text style={styles.heroLabel}>{condLabel}</Text>
+            <Text style={styles.heroLocation}>
+              {location.city}, {location.country}
+            </Text>
+          </View>
         </View>
 
-        <Divider />
+        {/* Stats grid */}
+        <View style={styles.statsGrid}>
+          <StatChip label="체감" value={formatTemp(current.apparent_temperature)} />
+          <StatChip label="습도" value={`${current.relative_humidity_2m}%`} color={COLORS.info} />
+          <StatChip label="바람" value={`${formatWind(current.wind_speed_10m)} ${windDir}`} />
+          <StatChip
+            label="자외선"
+            value={`${current.uv_index.toFixed(1)} (${uvIndexLabel(current.uv_index)})`}
+            color={uvColor}
+          />
+        </View>
 
-        {/* ── Current stats ── */}
-        <Row label="LOC:" value={`${location.city}, ${location.country}`} />
-        <Row label="TEMP:" value={formatTemp(current.temperature_2m)} valueColor={COLORS.greenBright} />
-        <Row label="FEEL:" value={formatTemp(current.apparent_temperature)} />
-        <Row label="HMDT:" value={`${current.relative_humidity_2m}%`} />
-        <Row label="WIND:" value={`${formatWind(current.wind_speed_10m)} ${windDir}`} />
-        <Row
-          label="UV:"
-          value={`${current.uv_index.toFixed(1)} [${uvIndexLabel(current.uv_index)}]`}
-          valueColor={
-            current.uv_index >= 8 ? COLORS.red :
-            current.uv_index >= 6 ? COLORS.amber :
-            COLORS.green
-          }
-        />
-
-        {/* ── Hourly forecast ── */}
+        {/* Hourly forecast */}
         {forecastSlice.length > 0 && (
-          <>
-            <Divider />
-            <SectionTitle text={`NEXT ${forecastSlice.length}H ─────────────`} />
-            {/* Header */}
-            <View style={styles.hourlyHeader}>
-              <Text style={styles.hourlyColTime}>TIME</Text>
-              <Text style={styles.hourlyColTemp}>TEMP</Text>
-              <Text style={styles.hourlyColPrecip}>RAIN</Text>
-            </View>
-            {forecastSlice.map((f, i) => {
-              const hh = String(new Date(f.time).getHours()).padStart(2, '0');
-              return (
-                <View key={i} style={styles.hourlyRow}>
-                  <Text style={styles.hourlyColTime}>{hh}:00</Text>
-                  <Text style={[styles.hourlyColTemp, { color: COLORS.greenBright }]}>
-                    {formatTemp(f.temp)}
-                  </Text>
-                  <Text style={[styles.hourlyColPrecip, {
-                    color: (f.precip ?? 0) >= 60 ? COLORS.cyan : COLORS.greenDim,
-                  }]}>
-                    {`${f.precip ?? 0}%`}
-                  </Text>
-                </View>
-              );
-            })}
-          </>
+          <View style={styles.section}>
+            <SectionLabel text={`향후 ${forecastSlice.length}시간`} />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.hourlyScroll}
+            >
+              {forecastSlice.map((f, i) => {
+                const hh = String(new Date(f.time).getHours()).padStart(2, '0');
+                return (
+                  <View key={i} style={styles.hourlyCard}>
+                    <Text style={styles.hourlyTime}>{hh}:00</Text>
+                    <Text style={styles.hourlyTemp}>{formatTemp(f.temp)}</Text>
+                    <Text
+                      style={[
+                        styles.hourlyPrecip,
+                        {
+                          color: (f.precip ?? 0) >= 60 ? COLORS.info : COLORS.textHint,
+                        },
+                      ]}
+                    >
+                      {`${f.precip ?? 0}%`}
+                    </Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
         )}
 
-        {/* ── Weekly forecast ── */}
+        {/* Weekly forecast */}
         {weekForecast.length > 0 && (
-          <>
-            <Divider />
-            <SectionTitle text="WEEKLY ─────────────────────" />
-            {/* Header */}
-            <View style={styles.weekHeader}>
-              <Text style={styles.weekColDay}>DAY</Text>
-              <Text style={styles.weekColEmoji}> </Text>
-              <Text style={styles.weekColHigh}>HIGH</Text>
-              <Text style={styles.weekColLow}>LOW</Text>
-              <Text style={styles.weekColRain}>RAIN</Text>
-            </View>
+          <View style={styles.section}>
+            <SectionLabel text="주간 예보" />
             {weekForecast.map((f, i) => (
-              <View
-                key={i}
-                style={[styles.weekRow, f.isToday && styles.weekRowToday]}>
-                <Text style={[styles.weekColDay, f.isToday && styles.weekDayToday]}>
-                  {f.dayName}
-                </Text>
-                <Text style={styles.weekColEmoji}>{f.emoji}</Text>
-                <Text style={[styles.weekColHigh, { color: COLORS.red }]}>
-                  {formatTemp(f.max)}
-                </Text>
-                <Text style={[styles.weekColLow, { color: COLORS.cyan }]}>
-                  {formatTemp(f.min)}
-                </Text>
-                <Text style={[styles.weekColRain, {
-                  color: f.precip >= 60 ? COLORS.cyan : COLORS.greenDim,
-                }]}>
+              <View key={i} style={[styles.weekRow, f.isToday && styles.weekRowToday]}>
+                <Text style={[styles.weekDay, f.isToday && styles.weekDayToday]}>{f.dayName}</Text>
+                <Text style={styles.weekEmoji}>{f.emoji}</Text>
+                <View style={styles.weekTemps}>
+                  <Text style={[styles.weekTemp, { color: COLORS.error }]}>
+                    {formatTemp(f.max)}
+                  </Text>
+                  <Text style={styles.weekTempSep}>/</Text>
+                  <Text style={[styles.weekTemp, { color: COLORS.info }]}>{formatTemp(f.min)}</Text>
+                </View>
+                <Text
+                  style={[
+                    styles.weekPrecip,
+                    {
+                      color: f.precip >= 60 ? COLORS.info : COLORS.textHint,
+                    },
+                  ]}
+                >
                   {`${f.precip}%`}
                 </Text>
               </View>
             ))}
-          </>
+          </View>
         )}
 
-        <Divider />
-        <Text style={styles.sync}>{`SYNC: ${lastSyncStr}`}</Text>
+        <Text style={styles.syncText}>마지막 업데이트 {lastSyncStr}</Text>
         <View style={{ height: SPACING.sm }} />
       </ScrollView>
     </GlowBox>
@@ -218,108 +219,212 @@ export default function WeatherWidget() {
 
 const styles = StyleSheet.create({
   box: { flex: 1 },
-  loading: { fontFamily: FONTS.mono, color: COLORS.amber, fontSize: FONTS.sizes.sm },
-  error:   { fontFamily: FONTS.mono, color: COLORS.red,   fontSize: FONTS.sizes.sm, marginBottom: SPACING.sm },
-  retryBtn: { borderWidth: 1, borderColor: COLORS.amber, paddingHorizontal: SPACING.sm, paddingVertical: 3, alignSelf: 'flex-start' },
-  retryText: { fontFamily: FONTS.mono, color: COLORS.amber, fontSize: FONTS.sizes.xs },
-  dimText:   { fontFamily: FONTS.mono, color: COLORS.greenDim, fontSize: FONTS.sizes.sm },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xl },
+  loadingText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textHint,
+    fontSize: FONTS.sizes.sm,
+    marginTop: SPACING.sm,
+  },
+  errorText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.error,
+    fontSize: FONTS.sizes.sm,
+    marginBottom: SPACING.sm,
+  },
+  retryBtn: {
+    backgroundColor: COLORS.primarySurface,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    alignSelf: 'flex-start',
+  },
+  retryText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.primaryLighter,
+    fontSize: FONTS.sizes.xs,
+    fontWeight: '600',
+  },
+  hintText: { fontFamily: FONTS.sans, color: COLORS.textHint, fontSize: FONTS.sizes.sm },
 
-  heroRow: { alignItems: 'center', paddingVertical: SPACING.xs },
-  emoji:   { fontSize: 40, textAlign: 'center', marginBottom: 4 },
-  condLabel: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenBright,
-    fontSize: FONTS.sizes.md,
-    textAlign: 'center',
-    letterSpacing: 2,
+  // Hero card
+  heroCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: SPACING.md,
+  },
+  heroEmoji: { fontSize: 46 },
+  heroInfo: { flex: 1 },
+  heroTemp: {
+    fontFamily: FONTS.sansMedium,
+    fontSize: FONTS.sizes.xl,
+    color: COLORS.textPrimary,
     fontWeight: '700',
   },
-
-  divider: { height: 1, backgroundColor: COLORS.greenFaint, marginVertical: 5, opacity: 0.6 },
-
-  row: { flexDirection: 'row', alignItems: 'center', marginVertical: 2, paddingRight: 2 },
-  label: { fontFamily: FONTS.mono, color: COLORS.greenDim, fontSize: FONTS.sizes.xs, letterSpacing: 1, width: 52 },
-  value: { fontFamily: FONTS.mono, color: COLORS.green, fontSize: FONTS.sizes.xs, letterSpacing: 0.5, flex: 1, textAlign: 'right' },
-
-  sectionTitle: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenFaint,
+  heroLabel: {
+    fontFamily: FONTS.sans,
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.textSecondary,
+    marginTop: 1,
+  },
+  heroLocation: {
+    fontFamily: FONTS.sans,
     fontSize: FONTS.sizes.xs,
-    letterSpacing: 1,
-    marginBottom: 4,
+    color: COLORS.textHint,
+    marginTop: 2,
   },
 
-  // ── Hourly ──
-  hourlyHeader: { flexDirection: 'row', marginBottom: 2 },
-  hourlyRow:    { flexDirection: 'row', marginVertical: 1 },
-  hourlyColTime: {
-    fontFamily: FONTS.mono, color: COLORS.greenDim,
-    fontSize: FONTS.sizes.xs, width: 40, letterSpacing: 0.5,
-  },
-  hourlyColTemp: {
-    fontFamily: FONTS.mono, color: COLORS.greenDim,
-    fontSize: FONTS.sizes.xs, flex: 1, textAlign: 'center',
-  },
-  hourlyColPrecip: {
-    fontFamily: FONTS.mono, color: COLORS.greenDim,
-    fontSize: FONTS.sizes.xs, width: 34, textAlign: 'right',
-  },
-
-  // ── Weekly ──
-  weekHeader: {
+  // Stats grid
+  statsGrid: {
     flexDirection: 'row',
-    marginBottom: 3,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.greenFaint,
-    paddingBottom: 2,
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    marginBottom: SPACING.md,
   },
+  statChip: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADIUS.sm,
+    padding: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+  },
+  statLabel: {
+    fontFamily: FONTS.sans,
+    fontSize: 11,
+    color: COLORS.textHint,
+    marginBottom: 2,
+  },
+  statValue: {
+    fontFamily: FONTS.sansMedium,
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.textPrimary,
+    fontWeight: '600',
+  },
+
+  // Section label
+  section: { marginBottom: SPACING.md },
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+    gap: SPACING.xs,
+  },
+  sectionLabelDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.primaryLight,
+  },
+  sectionLabelText: {
+    fontFamily: FONTS.sansMedium,
+    fontSize: 12,
+    color: COLORS.accent,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  sectionLabelLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.divider,
+  },
+
+  // Hourly
+  hourlyScroll: { marginHorizontal: -SPACING.xs },
+  hourlyCard: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADIUS.sm,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    marginHorizontal: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    minWidth: 56,
+  },
+  hourlyTime: {
+    fontFamily: FONTS.sans,
+    fontSize: 11,
+    color: COLORS.textHint,
+    marginBottom: 3,
+  },
+  hourlyTemp: {
+    fontFamily: FONTS.sansMedium,
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.textPrimary,
+    fontWeight: '600',
+    marginBottom: 3,
+  },
+  hourlyPrecip: {
+    fontFamily: FONTS.sans,
+    fontSize: 11,
+    fontWeight: '500',
+  },
+
+  // Weekly
   weekRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 2,
-    paddingVertical: 2,
-    paddingHorizontal: 2,
-    borderRadius: 2,
+    paddingVertical: 6,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.sm,
+    marginBottom: 3,
   },
   weekRowToday: {
-    backgroundColor: 'rgba(0,255,65,0.07)',
-    borderLeftWidth: 2,
-    borderLeftColor: COLORS.greenBright,
+    backgroundColor: COLORS.primarySurface,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
   },
-  weekColDay: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenDim,
-    fontSize: FONTS.sizes.xs,
-    width: 40,
-    letterSpacing: 0.5,
+  weekDay: {
+    fontFamily: FONTS.sans,
+    fontSize: FONTS.sizes.sm,
+    color: COLORS.textSecondary,
+    width: 38,
+    fontWeight: '500',
   },
-  weekDayToday: { color: COLORS.greenBright, fontWeight: '700' },
-  weekColEmoji: {
-    fontSize: 14,
-    width: 22,
-    textAlign: 'center',
+  weekDayToday: {
+    color: COLORS.primaryLighter,
+    fontWeight: '700',
   },
-  weekColHigh: {
-    fontFamily: FONTS.mono,
-    fontSize: FONTS.sizes.xs,
+  weekEmoji: { fontSize: 16, width: 24, textAlign: 'center' },
+  weekTemps: {
     flex: 1,
-    textAlign: 'right',
-    letterSpacing: 0.3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
   },
-  weekColLow: {
-    fontFamily: FONTS.mono,
+  weekTemp: {
+    fontFamily: FONTS.sansMedium,
+    fontSize: FONTS.sizes.sm,
+    fontWeight: '600',
+  },
+  weekTempSep: {
+    fontFamily: FONTS.sans,
     fontSize: FONTS.sizes.xs,
-    flex: 1,
-    textAlign: 'right',
-    letterSpacing: 0.3,
+    color: COLORS.textHint,
   },
-  weekColRain: {
-    fontFamily: FONTS.mono,
+  weekPrecip: {
+    fontFamily: FONTS.sans,
     fontSize: FONTS.sizes.xs,
     width: 34,
     textAlign: 'right',
-    letterSpacing: 0.3,
+    fontWeight: '500',
   },
 
-  sync: { fontFamily: FONTS.mono, color: COLORS.greenFaint, fontSize: FONTS.sizes.xs, letterSpacing: 1 },
+  syncText: {
+    fontFamily: FONTS.sans,
+    color: COLORS.textHint,
+    fontSize: 11,
+    textAlign: 'right',
+  },
 });
