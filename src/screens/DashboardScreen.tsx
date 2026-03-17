@@ -97,6 +97,6 @@ const styles = StyleSheet.create({
   calendarArea: { flex: 4 },
 
   rightStack: { flex: 1, gap: SPACING.sm },
-  newsArea: { flex: 6 },
-  sysArea: { flex: 4 },
+  newsArea: { flex: 4 },
+  sysArea: { flex: 6 },
 });
