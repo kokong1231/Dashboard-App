@@ -222,12 +222,13 @@ export default function SysMonitorWidget() {
   const tickRef = useRef(0);
 
   // ── GIT state (Zustand store) ──
-  const gitCommits = useGitStore(s => s.commits);
-  const gitActions = useGitStore(s => s.actions);
-  const gitUser    = useGitStore(s => s.username);
-  const gitFetched = useGitStore(s => s.fetchedAt);
-  const gitError   = useGitStore(s => s.hasError);
-  const loadGit    = useGitStore(s => s.load);
+  const gitCommits  = useGitStore(s => s.commits);
+  const gitActions  = useGitStore(s => s.actions);
+  const gitUser     = useGitStore(s => s.username);
+  const gitFetched  = useGitStore(s => s.fetchedAt);
+  const gitError    = useGitStore(s => s.hasError);
+  const gitLoading  = useGitStore(s => s.isLoading);
+  const loadGit     = useGitStore(s => s.load);
   const gitTickRef = useRef(0);
 
   // ── Paging state ──
@@ -313,9 +314,13 @@ export default function SysMonitorWidget() {
   const pageIndicator = page === 0 ? '● ○' : '○ ●';
   const pageTitle     = page === 0 ? '◈ SYS::MONITOR' : '◈ GIT::INTEL';
 
-  const fetchedStr = gitFetched
-    ? `SYNC ${String(gitFetched.getHours()).padStart(2,'0')}:${String(gitFetched.getMinutes()).padStart(2,'0')}`
-    : 'SYNCING…';
+  const fetchedStr = gitError
+    ? 'ERROR'
+    : gitLoading
+      ? 'SYNCING…'
+      : gitFetched
+        ? `SYNC ${String(gitFetched.getHours()).padStart(2,'0')}:${String(gitFetched.getMinutes()).padStart(2,'0')}`
+        : 'SYNCING…';
 
   return (
     <GlowBox title={pageTitle} titleRight={pageIndicator} style={styles.box} noPadding>
@@ -449,8 +454,12 @@ export default function SysMonitorWidget() {
                   <Text style={styles.gitErrorText}>⚠ CONNECTION FAILED</Text>
                 )}
 
-                {!gitError && gitCommits.length === 0 && (
+                {gitLoading && gitCommits.length === 0 && (
                   <Text style={styles.gitDimText}>FETCHING…</Text>
+                )}
+
+                {!gitLoading && !gitError && gitCommits.length === 0 && (
+                  <Text style={styles.gitDimText}>NO ACTIVITY</Text>
                 )}
 
                 {gitCommits.map((item, idx) => (
@@ -462,8 +471,12 @@ export default function SysMonitorWidget() {
                 {/* ── ACTIONS ── */}
                 <Section title="ACTIONS" />
 
-                {!gitError && gitActions.length === 0 && (
+                {gitLoading && gitActions.length === 0 && (
                   <Text style={styles.gitDimText}>FETCHING…</Text>
+                )}
+
+                {!gitLoading && !gitError && gitActions.length === 0 && (
+                  <Text style={styles.gitDimText}>NO ACTIONS</Text>
                 )}
 
                 {gitActions.map((item, idx) => (

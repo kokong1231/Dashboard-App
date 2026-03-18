@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { GITHUB_TOKEN } from '@env';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const GH_TOKEN = process.env.GITHUB_TOKEN ?? '';
+const GH_TOKEN = GITHUB_TOKEN ?? '';
 
 const gh = axios.create({
   baseURL: 'https://api.github.com',
