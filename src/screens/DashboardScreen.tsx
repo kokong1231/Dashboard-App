@@ -4,6 +4,7 @@ import Animated, { FadeIn, FadeInUp, SlideInLeft, SlideInRight } from 'react-nat
 import { useWeatherStore } from '@/store/useWeatherStore';
 import { useNewsStore } from '@/store/useNewsStore';
 import { useNotionStore } from '@/store/useNotionStore';
+import { useGitStore } from '@/store/useGitStore';
 import MatrixBackground from '@/components/MatrixBackground';
 import HeaderBar from '@/components/HeaderBar';
 import WeatherWidget from '@/components/WeatherWidget';
@@ -19,12 +20,14 @@ export default function DashboardScreen() {
   const fetchWeather = useWeatherStore(s => s.fetch);
   const fetchNews = useNewsStore(s => s.fetch);
   const fetchNotion = useNotionStore(s => s.fetch);
+  const loadGit = useGitStore(s => s.load);
 
   // Initial fetch
   useEffect(() => {
     fetchWeather();
     fetchNews();
     fetchNotion();
+    loadGit();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -33,6 +36,7 @@ export default function DashboardScreen() {
     fetchWeather();
     fetchNews();
     fetchNotion();
+    loadGit();
   }, 30000);
 
   return (
