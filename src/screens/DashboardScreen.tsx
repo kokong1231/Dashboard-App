@@ -41,7 +41,6 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.root}>
-      <GitPushToast />
       <StatusBar
         hidden
         translucent
@@ -90,6 +89,8 @@ export default function DashboardScreen() {
           </Animated.View>
         </View>
       </Animated.View>
+
+      <GitPushToast />
     </View>
   );
 }

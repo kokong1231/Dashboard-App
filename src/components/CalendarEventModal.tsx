@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as Animatable from 'react-native-animatable';
 import type { CalendarEventReadable } from 'react-native-calendar-events';
 import { COLORS, FONTS, SPACING } from '@/theme';
 
@@ -110,6 +111,11 @@ export function EventDetailModal({ event, onClose }: DetailProps) {
       visible
       onRequestClose={onClose}>
       <View style={styles.overlay}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFillObject}
+          onPress={onClose}
+          activeOpacity={1}
+        />
         <View style={styles.detailCard}>
 
           {/* Title header */}
@@ -179,11 +185,16 @@ export function EventListModal({ dateKey, events, onClose }: ListProps) {
     <>
       <Modal
         transparent
-        animationType="slide"
+        animationType="none"
         visible={!!dateKey}
         onRequestClose={onClose}>
-        <View style={styles.overlay}>
-          <View style={styles.listCard}>
+        <Animatable.View animation="fadeIn" duration={200} style={styles.overlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            onPress={onClose}
+            activeOpacity={1}
+          />
+          <Animatable.View animation="slideInUp" duration={300} style={styles.listCard}>
 
             {/* Header */}
             <View style={styles.listHeader}>
@@ -237,8 +248,8 @@ export function EventListModal({ dateKey, events, onClose }: ListProps) {
               <Text style={styles.modalFooterBtnText}>[ CLOSE ]</Text>
             </TouchableOpacity>
 
-          </View>
-        </View>
+          </Animatable.View>
+        </Animatable.View>
       </Modal>
 
       {/* Detail modal stacked on top */}
