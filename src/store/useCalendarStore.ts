@@ -36,6 +36,7 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
 
   loadMonth: async (year, month) => {
     if (!get().permissionGranted) return;
+    if (get().isLoading) return;
     set({ isLoading: true, hasError: false });
     try {
       const start = new Date(year, month, 1).toISOString();

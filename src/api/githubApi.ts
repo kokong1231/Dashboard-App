@@ -17,53 +17,55 @@ const gh = axios.create({
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface GitCommit {
-  eventId: string;   // GitHub event ID — used for new-push detection
+  eventId: string;
   repo: string;
   branch: string;
   message: string;
   author: string;
   timestamp: string;
-  commitCount: number; // total commits in this push event
+  commitCount: number;
 }
 
 export interface GitAction {
   repo: string;
   workflow: string;
-  status: string;        // 'queued' | 'in_progress' | 'completed'
-  conclusion: string | null; // 'success' | 'failure' | 'cancelled' | null
+  status: string;
+  conclusion: string | null;
   branch: string;
   timestamp: string;
 }
 
-export interface GitData {
-  username: string;
-  commits: GitCommit[];
-  actions: GitAction[];
-  fetchedAt: Date;
-}
-
 // ── API calls ─────────────────────────────────────────────────────────────────
 
-export async function fetchGitData(): Promise<GitData> {
-  // 1. get authenticated user
-  const userRes = await gh.get('/user');
-  const username = userRes.data.login as string;
+/** One-time call to resolve the authenticated username. */
+export async function fetchGitUsername(): Promise<string> {
+  const res = await gh.get('/user');
+  return res.data.login as string;
+}
 
-  // 2. events (commits) + repos in parallel
-  const [eventsRes, reposRes] = await Promise.all([
-    gh.get(`/users/${username}/events`, { params: { per_page: 50 } }),
-    gh.get('/user/repos', {
-      params: {
-        affiliation: 'owner,collaborator,organization_member',
-        sort: 'pushed',
-        per_page: 12,
-      },
-    }),
-  ]);
+/**
+ * Fetch push events for the user.
+ * Passes `If-None-Match` when an ETag is available — GitHub returns 304
+ * with no body (and without consuming a rate-limit slot) when nothing changed.
+ * Returns `null` on 304.
+ */
+export async function fetchGitEvents(
+  username: string,
+  etag: string | null,
+): Promise<{ commits: GitCommit[]; etag: string } | null> {
+  const res = await gh.get(`/users/${username}/events`, {
+    params: { per_page: 50 },
+    headers: etag ? { 'If-None-Match': etag } : {},
+    // accept 304 without throwing
+    validateStatus: s => (s >= 200 && s < 300) || s === 304,
+  });
 
-  // 3. parse push events → one entry per push event
+  if (res.status === 304) return null;
+
+  const newEtag: string = (res.headers['etag'] as string) ?? etag ?? '';
+
   const commits: GitCommit[] = [];
-  for (const event of eventsRes.data as any[]) {
+  for (const event of res.data as any[]) {
     if (event.type !== 'PushEvent') continue;
     const branch     = (event.payload?.ref as string)?.replace('refs/heads/', '') ?? '';
     const allCommits = (event.payload?.commits ?? []) as any[];
@@ -81,7 +83,22 @@ export async function fetchGitData(): Promise<GitData> {
     if (commits.length >= 15) break;
   }
 
-  // 4. latest workflow run per repo (parallel, ignore repos without actions)
+  return { commits, etag: newEtag };
+}
+
+/**
+ * Fetch the latest workflow run per repo.
+ * Called infrequently (every 5 min) — per_page reduced to 5 repos.
+ */
+export async function fetchGitActions(username: string): Promise<GitAction[]> {
+  const reposRes = await gh.get('/user/repos', {
+    params: {
+      affiliation: 'owner,collaborator,organization_member',
+      sort: 'pushed',
+      per_page: 5,
+    },
+  });
+
   const settled = await Promise.allSettled(
     (reposRes.data as any[]).map(async (repo: any) => {
       const runsRes = await gh.get(
@@ -91,23 +108,21 @@ export async function fetchGitData(): Promise<GitData> {
       const run = runsRes.data.workflow_runs?.[0];
       if (!run) return null;
       return {
-        repo: repo.full_name as string,
-        workflow: (run.name ?? run.display_title ?? '') as string,
-        status: run.status as string,
-        conclusion: (run.conclusion as string | null),
-        branch: (run.head_branch as string) ?? '',
-        timestamp: (run.updated_at as string) ?? '',
+        repo:       repo.full_name as string,
+        workflow:   (run.name ?? run.display_title ?? '') as string,
+        status:     run.status as string,
+        conclusion: run.conclusion as string | null,
+        branch:     (run.head_branch as string) ?? '',
+        timestamp:  (run.updated_at as string) ?? '',
       } satisfies GitAction;
     }),
   );
 
-  const actions: GitAction[] = settled
+  return settled
     .filter(
       (r): r is PromiseFulfilledResult<GitAction> =>
         r.status === 'fulfilled' && r.value !== null,
     )
     .map(r => r.value)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-  return { username, commits, actions, fetchedAt: new Date() };
 }

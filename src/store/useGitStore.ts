@@ -1,13 +1,19 @@
 import { create } from 'zustand';
-import { fetchGitData, GitAction, GitCommit } from '@/api/githubApi';
+import {
+  fetchGitUsername,
+  fetchGitEvents,
+  fetchGitActions,
+  GitAction,
+  GitCommit,
+} from '@/api/githubApi';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface GitPushNotification {
-  id: string;       // GitHub event ID
+  id: string;
   repo: string;
   branch: string;
-  message: string;  // first commit message
+  message: string;
   author: string;
   commitCount: number;
   timestamp: string;
@@ -20,14 +26,19 @@ interface GitStore {
   actions: GitAction[];
   fetchedAt: Date | null;
   isLoading: boolean;
+  isLoadingActions: boolean;
   hasError: boolean;
 
   // push notifications
   notifications: GitPushNotification[];
-  lastSeenEventId: string | null; // newest event ID seen so far
+  lastSeenEventId: string | null;
+  eventsEtag: string | null;
 
   // actions
+  /** Frequent poll: events only, ETag-cached. */
   load: () => Promise<void>;
+  /** Infrequent poll: workflow runs (5 repos). */
+  loadActions: () => Promise<void>;
   dismissNotification: (id: string) => void;
 }
 
@@ -39,24 +50,40 @@ export const useGitStore = create<GitStore>((set, get) => ({
   actions: [],
   fetchedAt: null,
   isLoading: false,
+  isLoadingActions: false,
   hasError: false,
   notifications: [],
   lastSeenEventId: null,
+  eventsEtag: null,
 
   load: async () => {
-    const { lastSeenEventId } = get();
+    const { isLoading, eventsEtag, lastSeenEventId } = get();
+    if (isLoading) return; // prevent concurrent calls
     set({ isLoading: true, hasError: false });
 
     try {
-      const data = await fetchGitData();
-      const newestEventId = data.commits[0]?.eventId ?? lastSeenEventId;
+      // Resolve username once; reuse on subsequent calls
+      let { username } = get();
+      if (!username) {
+        username = await fetchGitUsername();
+        set({ username });
+      }
 
-      // Detect new push events only after the first successful load
-      // (skip first load to avoid spamming old pushes)
+      const result = await fetchGitEvents(username, eventsEtag);
+
+      // 304 — nothing changed, skip state update
+      if (result === null) {
+        set({ isLoading: false });
+        return;
+      }
+
+      const { commits, etag } = result;
+      const newestEventId = commits[0]?.eventId ?? lastSeenEventId;
+
+      // Detect new pushes only after the first successful load
       const newNotifications: GitPushNotification[] = [];
       if (lastSeenEventId !== null) {
-        for (const commit of data.commits) {
-          // GitHub event IDs are numerically increasing — stop when we reach known events
+        for (const commit of commits) {
           if (BigInt(commit.eventId) <= BigInt(lastSeenEventId)) break;
           newNotifications.push({
             id:          commit.eventId,
@@ -71,17 +98,34 @@ export const useGitStore = create<GitStore>((set, get) => ({
       }
 
       set(prev => ({
-        username:       data.username,
-        commits:        data.commits,
-        actions:        data.actions,
-        fetchedAt:      data.fetchedAt,
-        isLoading:      false,
-        hasError:       false,
+        commits,
+        fetchedAt:       new Date(),
+        isLoading:       false,
+        hasError:        false,
+        eventsEtag:      etag,
         lastSeenEventId: newestEventId,
-        notifications:  [...prev.notifications, ...newNotifications],
+        notifications:   [...prev.notifications, ...newNotifications],
       }));
     } catch {
       set({ isLoading: false, hasError: true });
+    }
+  },
+
+  loadActions: async () => {
+    const { isLoadingActions } = get();
+    if (isLoadingActions) return;
+    set({ isLoadingActions: true });
+
+    try {
+      let { username } = get();
+      if (!username) {
+        username = await fetchGitUsername();
+        set({ username });
+      }
+      const actions = await fetchGitActions(username);
+      set({ actions, isLoadingActions: false });
+    } catch {
+      set({ isLoadingActions: false });
     }
   },
 

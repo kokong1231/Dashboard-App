@@ -20,7 +20,8 @@ export default function DashboardScreen() {
   const fetchWeather = useWeatherStore(s => s.fetch);
   const fetchNews = useNewsStore(s => s.fetch);
   const fetchNotion = useNotionStore(s => s.fetch);
-  const loadGit = useGitStore(s => s.load);
+  const loadGit        = useGitStore(s => s.load);
+  const loadGitActions = useGitStore(s => s.loadActions);
 
   // Initial fetch
   useEffect(() => {
@@ -28,16 +29,20 @@ export default function DashboardScreen() {
     fetchNews();
     fetchNotion();
     loadGit();
+    loadGitActions();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Background refresh every 30s (stores skip if data is still fresh)
+  // Push events: every 10 s — cheap thanks to ETag (304 costs 0 rate-limit)
   useInterval(() => {
     fetchWeather();
     fetchNews();
     fetchNotion();
     loadGit();
-  }, 30000);
+  }, 10000);
+
+  // Workflow runs: every 5 min — heavier (1 + 5 API calls per poll)
+  useInterval(loadGitActions, 300000);
 
   return (
     <View style={styles.root}>

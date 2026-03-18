@@ -4,6 +4,7 @@ import GlowBox from './GlowBox';
 import { EventListModal } from './CalendarEventModal';
 import { COLORS, FONTS, SPACING } from '@/theme';
 import { useCalendarStore } from '@/store/useCalendarStore';
+import { useInterval } from '@/hooks/useInterval';
 
 const DAY_LABELS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const MONTH_NAMES = [
@@ -52,6 +53,11 @@ export default function CalendarWidget() {
     if (permissionGranted) loadMonth(year, month);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, month, permissionGranted]);
+
+  // Periodic sync: re-read device calendar every 5 min for the current view month
+  useInterval(() => {
+    if (permissionGranted) loadMonth(year, month);
+  }, 5 * 60 * 1000);
 
   const prevMonth = () =>
     setViewDate(prev =>
