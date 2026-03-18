@@ -11,6 +11,7 @@ import CalendarWidget from '@/components/CalendarWidget';
 import NotionWidget from '@/components/NotionWidget';
 import NewsWidget from '@/components/NewsWidget';
 import SysMonitorWidget from '@/components/SysMonitorWidget';
+import GitPushToast from '@/components/GitPushToast';
 import { COLORS, SPACING } from '@/theme';
 import { useInterval } from '@/hooks/useInterval';
 
@@ -36,6 +37,7 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.root}>
+      <GitPushToast />
       <StatusBar
         hidden
         translucent

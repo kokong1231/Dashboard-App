@@ -10,6 +10,8 @@ import {
 } from 'react-native-device-info';
 import GlowBox from './GlowBox';
 import { COLORS, FONTS, SPACING } from '@/theme';
+import { GitAction, GitCommit } from '@/api/githubApi';
+import { useGitStore } from '@/store/useGitStore';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -28,8 +30,9 @@ const QUOTES = [
   { text: 'In theory and practice, they are the same. In practice, they are not.', src: 'Y. BERRA' },
 ];
 
-const STATS_EVERY = 3;
-const QUOTE_EVERY = 15;
+const STATS_EVERY  = 3;
+const QUOTE_EVERY  = 15;
+const GIT_REFRESH  = 60; // seconds between GitHub polls
 // Uniform column widths
 const LABEL_W  = 32;  // left label
 const VALUE_W  = 40;  // right value / percentage
@@ -42,6 +45,35 @@ function clamp(n: number, lo: number, hi: number) {
 }
 function fluctuate(current: number, min: number, max: number, delta: number): number {
   return clamp(Math.round(current + (Math.random() - 0.5) * delta * 2), min, max);
+}
+
+function relTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+
+function shortRepo(full: string): string {
+  if (full.length <= 22) return full;
+  const [owner, repo] = full.split('/');
+  if (!repo) return full.slice(0, 22);
+  const ownerShort = owner.length > 6 ? `${owner.slice(0, 5)}…` : owner;
+  const candidate = `${ownerShort}/${repo}`;
+  return candidate.length <= 22 ? candidate : candidate.slice(0, 22);
+}
+
+function actionIcon(status: string, conclusion: string | null): [string, string] {
+  if (status === 'in_progress') return ['●', COLORS.amber];
+  if (status === 'queued')      return ['◎', COLORS.greenDim];
+  if (conclusion === 'success') return ['✓', COLORS.green];
+  if (conclusion === 'failure') return ['✗', COLORS.red];
+  if (conclusion === 'cancelled') return ['∅', COLORS.greenFaint];
+  return ['?', COLORS.greenDim];
 }
 
 interface Stats {
@@ -135,30 +167,82 @@ function BattBar({ pct, color }: { pct: number; color: string }) {
   );
 }
 
+/** Single commit row */
+function CommitItem({ item }: { item: GitCommit }) {
+  const repo = shortRepo(item.repo);
+  const age  = relTime(item.timestamp);
+  const msg  = item.message.length > 36 ? `${item.message.slice(0, 35)}…` : item.message;
+  return (
+    <View style={styles.gitItem}>
+      <View style={styles.gitItemHeader}>
+        <Text style={styles.gitRepo} numberOfLines={1}>{repo}</Text>
+        <Text style={styles.gitAge}>{age}</Text>
+      </View>
+      <Text style={styles.gitMsg} numberOfLines={1}>{msg}</Text>
+    </View>
+  );
+}
+
+/** Single action run row */
+function ActionItem({ item }: { item: GitAction }) {
+  const [icon, iconColor] = actionIcon(item.status, item.conclusion);
+  const repo     = shortRepo(item.repo);
+  const age      = relTime(item.timestamp);
+  const wf       = item.workflow.length > 18 ? `${item.workflow.slice(0, 17)}…` : item.workflow;
+  const branch   = item.branch.length > 12 ? `${item.branch.slice(0, 11)}…` : item.branch;
+  return (
+    <View style={styles.gitItem}>
+      <View style={styles.gitItemHeader}>
+        <Text style={[styles.gitActionIcon, { color: iconColor }]}>{icon}</Text>
+        <Text style={styles.gitRepo} numberOfLines={1}>{repo}</Text>
+        <Text style={styles.gitAge}>{age}</Text>
+      </View>
+      <Text style={styles.gitMsg} numberOfLines={1}>{`${wf} · ${branch}`}</Text>
+    </View>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function SysMonitorWidget() {
   const batteryLevel = useBatteryLevel();
-  const powerState = usePowerState();
+  const powerState   = usePowerState();
 
+  // ── SYS state ──
   const [stats, setStats] = useState<Stats>({
     cpu: 38, mem: 61, gpu: 22, disk: 74,
     temp: 44, netUp: 12, netDown: 48, netPing: 18,
     processes: 218, threads: 1042, swapUsed: 28, cacheUsed: 15,
   });
   const [quoteIdx, setQuoteIdx] = useState(0);
-  const [uptime, setUptime] = useState(0);
+  const [uptime, setUptime]     = useState(0);
   const [deviceName, setDeviceName] = useState('ANDROID');
   const [osVersion, setOsVersion]   = useState('--');
   const [totalMemGB, setTotalMemGB] = useState('--');
   const tickRef = useRef(0);
 
+  // ── GIT state (Zustand store) ──
+  const gitCommits = useGitStore(s => s.commits);
+  const gitActions = useGitStore(s => s.actions);
+  const gitUser    = useGitStore(s => s.username);
+  const gitFetched = useGitStore(s => s.fetchedAt);
+  const gitError   = useGitStore(s => s.hasError);
+  const loadGit    = useGitStore(s => s.load);
+  const gitTickRef = useRef(0);
+
+  // ── Paging state ──
+  const [page, setPage]           = useState(0);
+  const [panelSize, setPanelSize] = useState({ width: 0, height: 0 });
+  const hScrollRef = useRef<ScrollView>(null);
+
+  // ── Device info ──
   useEffect(() => {
     try { setDeviceName(getDeviceNameSync().toUpperCase()); } catch {}
     try { setOsVersion(`ANDROID ${getSystemVersion()}`); } catch {}
     try { setTotalMemGB(`${(getTotalMemorySync() / 1073741824).toFixed(1)} GB`); } catch {}
   }, []);
 
+  // ── SYS ticker ──
   useEffect(() => {
     const id = setInterval(() => {
       tickRef.current += 1;
@@ -188,10 +272,24 @@ export default function SysMonitorWidget() {
       if (tick % QUOTE_EVERY === 0) {
         setQuoteIdx(i => (i + 1) % QUOTES.length);
       }
+
+      // GitHub poll every GIT_REFRESH seconds
+      gitTickRef.current += 1;
+      if (gitTickRef.current % GIT_REFRESH === 0) {
+        loadGit();
+      }
     }, 1000);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Initial GitHub fetch ──
+  useEffect(() => {
+    loadGit();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Derived SYS values ──
   const hh = Math.floor(uptime / 3600);
   const mm = Math.floor((uptime % 3600) / 60);
   const ss = uptime % 60;
@@ -212,92 +310,173 @@ export default function SysMonitorWidget() {
 
   const quote = QUOTES[quoteIdx];
 
+  const pageIndicator = page === 0 ? '● ○' : '○ ●';
+  const pageTitle     = page === 0 ? '◈ SYS::MONITOR' : '◈ GIT::INTEL';
+
+  const fetchedStr = gitFetched
+    ? `SYNC ${String(gitFetched.getHours()).padStart(2,'0')}:${String(gitFetched.getMinutes()).padStart(2,'0')}`
+    : 'SYNCING…';
+
   return (
-    <GlowBox title="◈ SYS::MONITOR" style={styles.box} noPadding>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+    <GlowBox title={pageTitle} titleRight={pageIndicator} style={styles.box} noPadding>
+      <View
+        style={{ flex: 1 }}
+        onLayout={e => {
+          const { width, height } = e.nativeEvent.layout;
+          if (width > 0 && height > 0) setPanelSize({ width, height });
+        }}>
 
-        {/* ── DEVICE ── */}
-        <Section title="DEVICE" />
-        <KVRow label="NODE" value={deviceName} color={COLORS.greenBright} />
-        <KVRow label="OS  " value={osVersion} />
-        <KVRow label="RAM " value={totalMemGB} />
-        <KVRow label="UP  " value={uptimeStr} color={COLORS.cyan} />
+        {panelSize.width > 0 && (
+          <ScrollView
+            ref={hScrollRef}
+            horizontal
+            pagingEnabled
+            scrollEventThrottle={200}
+            onMomentumScrollEnd={e => {
+              const p = Math.round(e.nativeEvent.contentOffset.x / panelSize.width);
+              setPage(p);
+            }}
+            showsHorizontalScrollIndicator={false}
+            style={{ flex: 1 }}>
 
-        <Divider />
+            {/* ══════════════ PAGE 0 · SYS::MONITOR ══════════════ */}
+            <View style={{ width: panelSize.width, height: panelSize.height }}>
+              <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}>
 
-        {/* ── COMPUTE ── */}
-        <Section title="COMPUTE" />
-        <BarRow label="CPU " value={stats.cpu} max={100} color={cpuColor} />
-        <BarRow label="GPU " value={stats.gpu} max={100} color={gpuColor} />
-        <KVRow  label="TEMP" value={`${stats.temp} °C`} color={tempColor} />
+                {/* ── DEVICE ── */}
+                <Section title="DEVICE" />
+                <KVRow label="NODE" value={deviceName} color={COLORS.greenBright} />
+                <KVRow label="OS  " value={osVersion} />
+                <KVRow label="RAM " value={totalMemGB} />
+                <KVRow label="UP  " value={uptimeStr} color={COLORS.cyan} />
 
-        <Divider />
+                <Divider />
 
-        {/* ── MEMORY ── */}
-        <Section title="MEMORY" />
-        <BarRow label="MEM " value={stats.mem}      max={100} color={memColor} />
-        <BarRow label="SWAP" value={stats.swapUsed} max={100} color={COLORS.greenDim} />
-        <BarRow label="CCHE" value={stats.cacheUsed} max={100} color={COLORS.greenFaint} />
+                {/* ── COMPUTE ── */}
+                <Section title="COMPUTE" />
+                <BarRow label="CPU " value={stats.cpu} max={100} color={cpuColor} />
+                <BarRow label="GPU " value={stats.gpu} max={100} color={gpuColor} />
+                <KVRow  label="TEMP" value={`${stats.temp} °C`} color={tempColor} />
 
-        <Divider />
+                <Divider />
 
-        {/* ── STORAGE ── */}
-        <Section title="STORAGE" />
-        <BarRow label="DISK" value={stats.disk} max={100} color={diskColor} />
+                {/* ── MEMORY ── */}
+                <Section title="MEMORY" />
+                <BarRow label="MEM " value={stats.mem}      max={100} color={memColor} />
+                <BarRow label="SWAP" value={stats.swapUsed} max={100} color={COLORS.greenDim} />
+                <BarRow label="CCHE" value={stats.cacheUsed} max={100} color={COLORS.greenFaint} />
 
-        <Divider />
+                <Divider />
 
-        {/* ── NETWORK ── */}
-        <Section title="NETWORK" />
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>{'UP  '}</Text>
-          <Text style={[styles.rowBar, { color: COLORS.green }]}>{`↑ ${String(stats.netUp).padStart(4,' ')} KB/s`}</Text>
-          <Text style={[styles.rowValue, { color: COLORS.green }]}> </Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>{'DOWN'}</Text>
-          <Text style={[styles.rowBar, { color: COLORS.amber }]}>{`↓ ${String(stats.netDown).padStart(4,' ')} KB/s`}</Text>
-          <Text style={[styles.rowValue, { color: COLORS.amber }]}> </Text>
-        </View>
-        <KVRow label="PING" value={`${stats.netPing} ms`} color={pingColor} />
+                {/* ── STORAGE ── */}
+                <Section title="STORAGE" />
+                <BarRow label="DISK" value={stats.disk} max={100} color={diskColor} />
 
-        <Divider />
+                <Divider />
 
-        {/* ── PROCESSES ── */}
-        <Section title="PROCESSES" />
-        <KVDualRow
-          labelA="PROC" valueA={String(stats.processes)} colorA={COLORS.green}
-          labelB="THRD" valueB={String(stats.threads)}   colorB={COLORS.greenDim}
-        />
+                {/* ── NETWORK ── */}
+                <Section title="NETWORK" />
+                <View style={styles.row}>
+                  <Text style={styles.rowLabel}>{'UP  '}</Text>
+                  <Text style={[styles.rowBar, { color: COLORS.green }]}>{`↑ ${String(stats.netUp).padStart(4,' ')} KB/s`}</Text>
+                  <Text style={[styles.rowValue, { color: COLORS.green }]}> </Text>
+                </View>
+                <View style={styles.row}>
+                  <Text style={styles.rowLabel}>{'DOWN'}</Text>
+                  <Text style={[styles.rowBar, { color: COLORS.amber }]}>{`↓ ${String(stats.netDown).padStart(4,' ')} KB/s`}</Text>
+                  <Text style={[styles.rowValue, { color: COLORS.amber }]}> </Text>
+                </View>
+                <KVRow label="PING" value={`${stats.netPing} ms`} color={pingColor} />
 
-        {/* ── POWER ── */}
-        {battPct != null && (
-          <>
-            <Divider />
-            <Section title="POWER" />
-            <BattBar pct={battPct} color={battColor} />
-            <KVRow
-              label="STAT"
-              value={isCharging ? '⚡ CHARGING' : 'DISCHARGING'}
-              color={isCharging ? COLORS.amber : battColor}
-            />
-          </>
+                <Divider />
+
+                {/* ── PROCESSES ── */}
+                <Section title="PROCESSES" />
+                <KVDualRow
+                  labelA="PROC" valueA={String(stats.processes)} colorA={COLORS.green}
+                  labelB="THRD" valueB={String(stats.threads)}   colorB={COLORS.greenDim}
+                />
+
+                {/* ── POWER ── */}
+                {battPct != null && (
+                  <>
+                    <Divider />
+                    <Section title="POWER" />
+                    <BattBar pct={battPct} color={battColor} />
+                    <KVRow
+                      label="STAT"
+                      value={isCharging ? '⚡ CHARGING' : 'DISCHARGING'}
+                      color={isCharging ? COLORS.amber : battColor}
+                    />
+                  </>
+                )}
+
+                <Divider />
+
+                {/* ── THOUGHT STREAM ── */}
+                <Section title="THOUGHT STREAM" />
+                <Animated.View key={quoteIdx} entering={FadeIn.duration(800)}>
+                  <Text style={styles.quoteText}>{`"${quote.text}"`}</Text>
+                  <Text style={styles.quoteSrc}>{`  — ${quote.src}`}</Text>
+                </Animated.View>
+
+                <View style={{ height: SPACING.md }} />
+              </ScrollView>
+            </View>
+
+            {/* ══════════════ PAGE 1 · GIT::INTEL ══════════════ */}
+            <View style={{ width: panelSize.width, height: panelSize.height }}>
+              <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}>
+
+                {/* ── IDENTITY ── */}
+                <View style={styles.gitHeader}>
+                  <Text style={styles.gitUser}>{gitUser ? `@${gitUser}` : '...'}</Text>
+                  <Text style={styles.gitSync}>{fetchedStr}</Text>
+                </View>
+
+                <Divider />
+
+                {/* ── RECENT COMMITS ── */}
+                <Section title="ACTIVITY" />
+
+                {gitError && (
+                  <Text style={styles.gitErrorText}>⚠ CONNECTION FAILED</Text>
+                )}
+
+                {!gitError && gitCommits.length === 0 && (
+                  <Text style={styles.gitDimText}>FETCHING…</Text>
+                )}
+
+                {gitCommits.map((item, idx) => (
+                  <CommitItem key={`c${idx}`} item={item} />
+                ))}
+
+                <Divider />
+
+                {/* ── ACTIONS ── */}
+                <Section title="ACTIONS" />
+
+                {!gitError && gitActions.length === 0 && (
+                  <Text style={styles.gitDimText}>FETCHING…</Text>
+                )}
+
+                {gitActions.map((item, idx) => (
+                  <ActionItem key={`a${idx}`} item={item} />
+                ))}
+
+                <View style={{ height: SPACING.md }} />
+              </ScrollView>
+            </View>
+
+          </ScrollView>
         )}
-
-        <Divider />
-
-        {/* ── THOUGHT STREAM ── */}
-        <Section title="THOUGHT STREAM" />
-        <Animated.View key={quoteIdx} entering={FadeIn.duration(800)}>
-          <Text style={styles.quoteText}>{`"${quote.text}"`}</Text>
-          <Text style={styles.quoteSrc}>{`  — ${quote.src}`}</Text>
-        </Animated.View>
-
-        <View style={{ height: SPACING.md }} />
-      </ScrollView>
+      </View>
     </GlowBox>
   );
 }
@@ -401,5 +580,75 @@ const styles = StyleSheet.create({
     color: COLORS.greenDim,
     fontSize: 9,
     letterSpacing: 0.5,
+  },
+
+  // ── Git panel ──────────────────────────────────────────────────────────────
+  gitHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  gitUser: {
+    fontFamily: FONTS.mono,
+    color: COLORS.greenBright,
+    fontSize: 10,
+    letterSpacing: 1,
+    fontWeight: '700',
+  },
+  gitSync: {
+    fontFamily: FONTS.mono,
+    color: COLORS.greenDim,
+    fontSize: 9,
+    letterSpacing: 0.5,
+  },
+
+  gitItem: {
+    marginBottom: 5,
+  },
+  gitItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 1,
+  },
+  gitActionIcon: {
+    fontFamily: FONTS.mono,
+    fontSize: 10,
+    width: 14,
+  },
+  gitRepo: {
+    fontFamily: FONTS.mono,
+    color: COLORS.cyan,
+    fontSize: 9,
+    letterSpacing: 0.5,
+    flex: 1,
+  },
+  gitAge: {
+    fontFamily: FONTS.mono,
+    color: COLORS.greenDim,
+    fontSize: 9,
+    marginLeft: 4,
+  },
+  gitMsg: {
+    fontFamily: FONTS.mono,
+    color: COLORS.green,
+    fontSize: 9,
+    letterSpacing: 0.3,
+    paddingLeft: 2,
+  },
+
+  gitErrorText: {
+    fontFamily: FONTS.mono,
+    color: COLORS.red,
+    fontSize: 10,
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  gitDimText: {
+    fontFamily: FONTS.mono,
+    color: COLORS.greenFaint,
+    fontSize: 10,
+    letterSpacing: 1,
+    marginBottom: 4,
   },
 });
