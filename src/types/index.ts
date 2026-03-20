@@ -165,3 +165,18 @@ export interface NotionDatabaseListItem {
   url: string;
   emoji?: string;
 }
+
+// ── Community Feed ──────────────────────────────────────────────────────────
+export interface CommunityFeedItem {
+  id: string;
+  title: string;
+  summary: string;
+  /** 리멤버 | 블라인드 | 네이트판 */
+  platform: string;
+  /** 연애 | 결혼 | 기술 | 회사생활 */
+  category: string;
+  views: number;
+  comments: number;
+  writtenAt: string | null;
+  url: string | null;
+}

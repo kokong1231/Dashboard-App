@@ -1,24 +1,29 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import * as Animatable from 'react-native-animatable';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/navigation/RootNavigator';
 import { useNewsStore } from '@/store/useNewsStore';
+import { useCommunityStore } from '@/store/useCommunityStore';
 import { formatRelativeTime } from '@/utils/formatters';
 import GlowBox from './GlowBox';
 import PulseText from './PulseText';
 import { COLORS, FONTS, SPACING } from '@/theme';
 import { useInterval } from '@/hooks/useInterval';
 import { fetchSentryData, SentryData } from '@/api/sentryApi';
+import { CommunityFeedItem } from '@/types';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -55,6 +60,20 @@ const CAT_COLORS: Record<string, string> = {
   '경제': '#ffd700',
   '사회': '#ff6b35',
   '국제': COLORS.greenDim,
+  // Community categories
+  '회사생활': COLORS.greenBright,
+  '개발':     COLORS.cyan,
+  '연봉':     '#ffd700',
+  '이직':     COLORS.amber,
+  '스타트업': '#ff6b35',
+  '취업':     '#b39ddb',
+  '기술면접': COLORS.green,
+  '연애/결혼': '#ff69b4',
+};
+
+const SOURCE_COLORS: Record<string, string> = {
+  BLIND:    '#ff6b35',
+  REMEMBER: '#4fc3f7',
 };
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -100,6 +119,168 @@ function SentryIssueItem({ item }: { item: SentryData['issues'][0] }) {
   );
 }
 
+// ── Community Feed Page ───────────────────────────────────────────────────────
+
+const PLATFORM_COLORS: Record<string, string> = {
+  '리멤버': '#4fc3f7',
+  '블라인드': '#ff6b35',
+  '네이트판': COLORS.amber,
+};
+
+const COMMUNITY_REFRESH_MS = 15 * 60 * 1000; // 15 minutes
+
+function CommunityFeedPage({ width, height }: { width: number; height: number }) {
+  const posts     = useCommunityStore(s => s.items);
+  const isLoading = useCommunityStore(s => s.isLoading);
+  const hasError  = useCommunityStore(s => s.hasError);
+  const fetchedAt = useCommunityStore(s => s.fetchedAt);
+  const fetch     = useCommunityStore(s => s.fetch);
+
+  const [index, setIndex] = useState(0);
+  // Tracks last user interaction (touch/swipe) time — resets 15-min auto-refresh clock
+  const lastInteractionRef = useRef(Date.now());
+
+  const resetInteraction = useCallback(() => {
+    lastInteractionRef.current = Date.now();
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    resetInteraction();
+    fetch();
+  }, [fetch, resetInteraction]);
+
+  const goNext = useCallback(() => {
+    resetInteraction();
+    setIndex(i => (i + 1) % Math.max(posts.length, 1));
+  }, [posts.length, resetInteraction]);
+
+  const goPrev = useCallback(() => {
+    resetInteraction();
+    setIndex(i => (i - 1 + Math.max(posts.length, 1)) % Math.max(posts.length, 1));
+  }, [posts.length, resetInteraction]);
+
+  const goNextRef = useRef(goNext);
+  const goPrevRef = useRef(goPrev);
+  useEffect(() => { goNextRef.current = goNext; }, [goNext]);
+  useEffect(() => { goPrevRef.current = goPrev; }, [goPrev]);
+
+  const swipePanel = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 12 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderRelease: (_, g) => {
+        if (g.dy < -40)      goNextRef.current();
+        else if (g.dy > 40)  goPrevRef.current();
+      },
+    }),
+  ).current;
+
+  // Auto-refresh: check every 30 s — if no interaction for 15 min, fetch new data
+  useInterval(() => {
+    if (Date.now() - lastInteractionRef.current >= COMMUNITY_REFRESH_MS) {
+      lastInteractionRef.current = Date.now(); // reset so we don't re-trigger immediately
+      fetch();
+    }
+  }, 30000);
+
+  const syncStr = fetchedAt
+    ? `${String(fetchedAt.getHours()).padStart(2, '0')}:${String(fetchedAt.getMinutes()).padStart(2, '0')} [15m]`
+    : '--:-- [15m]';
+
+  if (isLoading && posts.length === 0) {
+    return (
+      <View style={[{ width, height }, styles.centerPad]}>
+        <PulseText style={styles.loadingText} duration={600}>{'> LOADING FEED...'}</PulseText>
+      </View>
+    );
+  }
+
+  if (hasError && posts.length === 0) {
+    return (
+      <View style={[{ width, height }, styles.centerPad]}>
+        <Text style={styles.errorText}>{'> ERR: NOTION UNREACHABLE'}</Text>
+        <TouchableOpacity style={styles.refreshBtn} onPress={handleRefresh}>
+          <Text style={styles.refreshIcon}>{'⟳'}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (posts.length === 0) {
+    return (
+      <View style={[{ width, height }, styles.centerPad]}>
+        <Text style={styles.errorText}>{'> NO ITEMS'}</Text>
+        <TouchableOpacity style={styles.refreshBtn} onPress={handleRefresh}>
+          <Text style={styles.refreshIcon}>{'⟳'}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const clampedIndex = Math.min(index, posts.length - 1);
+  const post: CommunityFeedItem = posts[clampedIndex];
+  const platformColor = PLATFORM_COLORS[post.platform] ?? COLORS.greenDim;
+  const catColor      = CAT_COLORS[post.category] ?? COLORS.greenDim;
+  const posStr        = `${clampedIndex + 1} / ${posts.length}`;
+  const dateStr       = post.writtenAt ? post.writtenAt.slice(0, 10).replace(/-/g, '.') : null;
+
+  return (
+    <View style={{ width, height }} {...swipePanel.panHandlers}>
+      {/* ── Header bar ── */}
+      <View style={styles.commHeader}>
+        <View style={styles.commHeaderLeft}>
+          <View style={[styles.sourceBadge, { borderColor: platformColor }]}>
+            <Text style={[styles.sourceText2, { color: platformColor }]}>{post.platform || '?'}</Text>
+          </View>
+          {post.category ? (
+            <View style={[styles.catBadge, { borderColor: catColor }]}>
+              <Text style={[styles.catText, { color: catColor }]}>{post.category}</Text>
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.commHeaderRight}>
+          {dateStr && <Text style={styles.commPos}>{dateStr}</Text>}
+          <Text style={styles.commPos}>{posStr}</Text>
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={handleRefresh}
+            disabled={isLoading}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <Text style={[styles.refreshIcon, isLoading && styles.refreshIconDim]}>{'⟳'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* ── Divider ── */}
+      <View style={styles.commDivider} />
+
+      {/* ── Post content ── */}
+      <View style={styles.commBodyWrapper}>
+        <Animated.View key={`post-${clampedIndex}`} entering={FadeInDown.duration(300)} style={styles.commBody}>
+          <Text style={styles.commTitle}>{post.title}</Text>
+          <View style={styles.commBodyDivider} />
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.commScroll}
+            nestedScrollEnabled
+            onTouchStart={resetInteraction}>
+            <Text style={styles.commContent}>{post.summary || '(내용 없음)'}</Text>
+          </ScrollView>
+        </Animated.View>
+      </View>
+
+      {/* ── Stats bar ── */}
+      <View style={styles.commDivider} />
+      <View style={styles.commStats}>
+        <Text style={styles.commStat}>{`◎ ${post.views.toLocaleString()}`}</Text>
+        <Text style={styles.commStatSep}> · </Text>
+        <Text style={styles.commStat}>{`▸ ${post.comments.toLocaleString()}`}</Text>
+        <View style={{ flex: 1 }} />
+        <Text style={styles.commTime}>{`SYNC ${syncStr}`}</Text>
+      </View>
+    </View>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function NewsWidget() {
@@ -116,9 +297,9 @@ export default function NewsWidget() {
   const [sentryData,    setSentryData]    = useState<SentryData | null>(null);
   const [sentryLoading, setSentryLoading] = useState(true);
   const [sentryError,   setSentryError]   = useState(false);
-  const sentryFetchedRef = useRef(0); // seconds since last sentry fetch
+  const sentryFetchedRef = useRef(0);
 
-  // ── Paging state ──
+  // ── Paging state (now 3 pages: 0=News, 1=Community, 2=Sentry) ──
   const [page, setPage]           = useState(0);
   const [panelSize, setPanelSize] = useState({ width: 0, height: 0 });
   const hScrollRef = useRef<ScrollView>(null);
@@ -182,13 +363,11 @@ export default function NewsWidget() {
     ? `SYNC ${String(sentryData.fetchedAt.getHours()).padStart(2,'0')}:${String(sentryData.fetchedAt.getMinutes()).padStart(2,'0')}`
     : 'SYNCING…';
 
-  const pageTitle     = page === 0 ? '◈ AI//NEWS_FEED' : '◈ SENTRY::ERR_LOG';
-  const pageTitleRight = page === 0
-    ? `● ○`
-    : `○ ●`;
+  const PAGE_TITLES = ['◈ AI//NEWS_FEED', '◈ COMMUNITY::FEED', '◈ SENTRY::ERR_LOG'];
+  const pageTitle   = PAGE_TITLES[page] ?? PAGE_TITLES[0];
 
   return (
-    <GlowBox title={pageTitle} titleRight={pageTitleRight} style={styles.box} noPadding>
+    <GlowBox title={pageTitle} style={styles.box} noPadding>
       <View
         style={{ flex: 1 }}
         onLayout={e => {
@@ -277,7 +456,10 @@ export default function NewsWidget() {
               )}
             </View>
 
-            {/* ══════════════ PAGE 1 · SENTRY::ERR_LOG ══════════════ */}
+            {/* ══════════════ PAGE 1 · COMMUNITY::FEED ══════════════ */}
+            <CommunityFeedPage width={panelSize.width} height={panelSize.height} />
+
+            {/* ══════════════ PAGE 2 · SENTRY::ERR_LOG ══════════════ */}
             <View style={{ width: panelSize.width, height: panelSize.height }}>
               {sentryLoading && !sentryData ? (
                 <View style={styles.centerPad}>
@@ -472,6 +654,122 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.xs,
     letterSpacing: 1,
     marginTop: SPACING.xs,
+  },
+
+  // ── Community Feed page ────────────────────────────────────────────────────
+  commHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+    paddingTop: SPACING.xs,
+    paddingBottom: SPACING.xs,
+  },
+  commHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  commHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sourceBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 2,
+  },
+  sourceText2: {
+    fontFamily: FONTS.mono,
+    fontSize: 10,
+    letterSpacing: 1,
+    fontWeight: '700',
+  },
+  commPos: {
+    fontFamily: FONTS.mono,
+    color: COLORS.greenFaint,
+    fontSize: 9,
+    letterSpacing: 0.5,
+  },
+  refreshBtn: {
+    padding: 2,
+  },
+  refreshIcon: {
+    fontFamily: FONTS.mono,
+    color: COLORS.greenDim,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  refreshIconDim: {
+    opacity: 0.3,
+  },
+
+  commDivider: {
+    height: 1,
+    backgroundColor: COLORS.greenFaint,
+    opacity: 0.4,
+    marginHorizontal: SPACING.sm,
+  },
+
+  commBodyWrapper: {
+    flex: 1,
+  },
+  commBody: {
+    flex: 1,
+    paddingHorizontal: SPACING.sm,
+    paddingTop: SPACING.sm,
+  },
+  commTitle: {
+    fontFamily: FONTS.mono,
+    color: COLORS.greenBright,
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginBottom: SPACING.xs,
+  },
+  commBodyDivider: {
+    height: 1,
+    backgroundColor: COLORS.greenFaint,
+    opacity: 0.3,
+    marginBottom: SPACING.sm,
+  },
+  commScroll: {
+    flex: 1,
+  },
+  commContent: {
+    fontFamily: FONTS.mono,
+    color: COLORS.green,
+    fontSize: 12,
+    lineHeight: 20,
+    letterSpacing: 0.2,
+  },
+
+  commStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  commStat: {
+    fontFamily: FONTS.mono,
+    color: COLORS.greenDim,
+    fontSize: 10,
+    letterSpacing: 0.5,
+  },
+  commStatSep: {
+    fontFamily: FONTS.mono,
+    color: COLORS.greenFaint,
+    fontSize: 10,
+    marginHorizontal: 2,
+  },
+  commTime: {
+    fontFamily: FONTS.mono,
+    color: COLORS.greenFaint,
+    fontSize: 9,
+    letterSpacing: 0.3,
   },
 
   // ── Sentry page ────────────────────────────────────────────────────────────

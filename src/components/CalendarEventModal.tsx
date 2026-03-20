@@ -27,11 +27,51 @@ function fmtDateTime(iso: string): string {
   return `${date}  ${time}`;
 }
 
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function fmtDateKey(dateKey: string): string {
-  // dateKey: 'YYYY-MM-DD'
   const [y, m, d] = dateKey.split('-').map(Number);
   const dow = DOW[new Date(y, m - 1, d).getDay()];
   return `${dateKey}  [${dow}]`;
+}
+
+/** Returns inclusive end date key (adjusts exclusive all-day end). */
+function getInclusiveEndDate(ev: CalendarEventReadable): Date | null {
+  if (!ev.endDate) return null;
+  const d = new Date(ev.endDate);
+  if (ev.allDay) {
+    d.setDate(d.getDate() - 1); // exclusive next-day → inclusive last day
+  } else if (
+    d.getHours() === 0 && d.getMinutes() === 0 &&
+    d.getSeconds() === 0 && d.getMilliseconds() === 0
+  ) {
+    d.setDate(d.getDate() - 1); // local-midnight end = previous day
+  }
+  return d;
+}
+
+/** Number of calendar days the event spans (1 = single day). */
+function spanDays(ev: CalendarEventReadable): number {
+  const endDate = getInclusiveEndDate(ev);
+  if (!endDate) return 1;
+  const start = new Date(ev.startDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+  return Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+}
+
+/** Which day of the span is `dateKey` (1-based), or 0 if not applicable. */
+function spanDayIndex(ev: CalendarEventReadable, dateKey: string): number {
+  const startKey = fmtDate(ev.startDate);
+  const [sy, sm, sd] = startKey.split('-').map(Number);
+  const [dy, dm, dd] = dateKey.split('-').map(Number);
+  const startD = new Date(sy, sm - 1, sd);
+  const thisD  = new Date(dy, dm - 1, dd);
+  return Math.round((thisD.getTime() - startD.getTime()) / 86400000) + 1;
 }
 
 // Android returns calendar color as an ARGB int or hex string
@@ -100,9 +140,24 @@ export function EventDetailModal({ event, onClose }: DetailProps) {
   if (!event) return null;
   const calColor = resolveCalendarColor(event);
 
-  const timeValue = event.allDay
-    ? '종일'
-    : `${fmtDateTime(event.startDate)}  →  ${event.endDate ? fmtTime(event.endDate) : '--:--'}`;
+  const days = spanDays(event);
+  const endDate = getInclusiveEndDate(event);
+
+  let timeValue: string;
+  if (event.allDay) {
+    if (days <= 1) {
+      timeValue = '종일';
+    } else {
+      timeValue = `${fmtDate(event.startDate)}  ~  ${endDate ? fmtDate(endDate.toISOString()) : '?'}\n기간  ${days}일`;
+    }
+  } else if (days > 1) {
+    timeValue =
+      `${fmtDateTime(event.startDate)}\n` +
+      `~ ${endDate ? fmtDateTime(endDate.toISOString()) : '?'}\n` +
+      `기간  ${days}일`;
+  } else {
+    timeValue = `${fmtDateTime(event.startDate)}  →  ${event.endDate ? fmtTime(event.endDate) : '--:--'}`;
+  }
 
   return (
     <Modal
@@ -216,10 +271,26 @@ export function EventListModal({ dateKey, events, onClose }: ListProps) {
                 <Text style={styles.emptyText}>일정 없음</Text>
               ) : (
                 events.map((ev, i) => {
-                  const color = resolveCalendarColor(ev);
-                  const timeLabel = ev.allDay
-                    ? '종일'
-                    : `${fmtTime(ev.startDate)} – ${ev.endDate ? fmtTime(ev.endDate) : '--:--'}`;
+                  const color    = resolveCalendarColor(ev);
+                  const days     = spanDays(ev);
+                  const dayIdx   = dateKey ? spanDayIndex(ev, dateKey) : 1;
+                  const isCont   = dayIdx > 1;
+                  const endDate  = getInclusiveEndDate(ev);
+
+                  let timeLabel: string;
+                  if (ev.allDay) {
+                    if (days <= 1) {
+                      timeLabel = '종일';
+                    } else {
+                      timeLabel = `종일  ·  ${fmtDate(ev.startDate)} ~ ${endDate ? fmtDate(endDate.toISOString()) : '?'}  (${days}일)`;
+                    }
+                  } else {
+                    timeLabel = `${fmtTime(ev.startDate)} – ${ev.endDate ? fmtTime(ev.endDate) : '--:--'}`;
+                    if (days > 1) {
+                      timeLabel += `  ·  ${days}일`;
+                    }
+                  }
+
                   return (
                     <TouchableOpacity
                       key={ev.id ?? i}
@@ -228,6 +299,16 @@ export function EventListModal({ dateKey, events, onClose }: ListProps) {
                       activeOpacity={0.7}>
                       <View style={[styles.eventColorBar, { backgroundColor: color }]} />
                       <View style={styles.eventRowBody}>
+                        {/* Continuation badge */}
+                        {isCont && (
+                          <View style={styles.contBadgeRow}>
+                            <View style={[styles.contBadge, { borderColor: color }]}>
+                              <Text style={[styles.contBadgeText, { color }]}>
+                                {`${dayIdx} / ${days}일차`}
+                              </Text>
+                            </View>
+                          </View>
+                        )}
                         <Text style={styles.eventRowTitle} numberOfLines={1}>
                           {ev.title}
                         </Text>
@@ -366,6 +447,21 @@ const styles = StyleSheet.create({
     color: COLORS.greenDim,
     fontSize: FONTS.sizes.xs - 1,
     marginTop: 2,
+  },
+  contBadgeRow: {
+    flexDirection: 'row',
+    marginBottom: 3,
+  },
+  contBadge: {
+    borderWidth: 1,
+    borderRadius: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  contBadgeText: {
+    fontFamily: FONTS.mono,
+    fontSize: FONTS.sizes.xs - 2,
+    letterSpacing: 0.5,
   },
   eventChevron: {
     fontFamily: FONTS.mono,

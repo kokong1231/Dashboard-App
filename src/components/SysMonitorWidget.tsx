@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import * as Animatable from 'react-native-animatable';
 import {
   useBatteryLevel,
   usePowerState,
@@ -10,7 +11,7 @@ import {
 } from 'react-native-device-info';
 import GlowBox from './GlowBox';
 import { COLORS, FONTS, SPACING } from '@/theme';
-import { GitAction, GitCommit } from '@/api/githubApi';
+import { GitAction } from '@/api/githubApi';
 import { useGitStore } from '@/store/useGitStore';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -30,13 +31,11 @@ const QUOTES = [
   { text: 'In theory and practice, they are the same. In practice, they are not.', src: 'Y. BERRA' },
 ];
 
-const STATS_EVERY  = 3;
-const QUOTE_EVERY  = 15;
-const GIT_REFRESH  = 60; // seconds between GitHub polls
-// Uniform column widths
-const LABEL_W  = 32;  // left label
-const VALUE_W  = 40;  // right value / percentage
-const BAR_BARS = 9;   // number of block chars in bar
+const STATS_EVERY = 3;
+const QUOTE_EVERY = 15;
+const LABEL_W     = 32;
+const VALUE_W     = 40;
+const BAR_BARS    = 9;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -46,7 +45,6 @@ function clamp(n: number, lo: number, hi: number) {
 function fluctuate(current: number, min: number, max: number, delta: number): number {
   return clamp(Math.round(current + (Math.random() - 0.5) * delta * 2), min, max);
 }
-
 function relTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const s = Math.floor(diff / 1000);
@@ -57,7 +55,6 @@ function relTime(iso: string): string {
   if (h < 24) return `${h}h`;
   return `${Math.floor(h / 24)}d`;
 }
-
 function shortRepo(full: string): string {
   if (full.length <= 22) return full;
   const [owner, repo] = full.split('/');
@@ -68,12 +65,27 @@ function shortRepo(full: string): string {
 }
 
 function actionIcon(status: string, conclusion: string | null): [string, string] {
-  if (status === 'in_progress') return ['●', COLORS.amber];
+  if (status === 'in_progress') return ['▶', COLORS.amber];
   if (status === 'queued')      return ['◎', COLORS.greenDim];
   if (conclusion === 'success') return ['✓', COLORS.green];
   if (conclusion === 'failure') return ['✗', COLORS.red];
   if (conclusion === 'cancelled') return ['∅', COLORS.greenFaint];
   return ['?', COLORS.greenDim];
+}
+
+// Animated progress bar: cycles fill for in_progress, fixed for others
+function progressFill(status: string, conclusion: string | null, tick: number): string {
+  if (status === 'in_progress') {
+    // Animate: fill sweeps 0→12→0 on a 12-step cycle
+    const pos = tick % 24;
+    const filled = pos <= 12 ? pos : 24 - pos;
+    return '█'.repeat(filled) + '░'.repeat(12 - filled);
+  }
+  const fill =
+    conclusion === 'success'   ? 12 :
+    status     === 'queued'    ? 2  :
+    conclusion === 'failure'   ? 12 : 3;
+  return '█'.repeat(fill) + '░'.repeat(12 - fill);
 }
 
 interface Stats {
@@ -84,7 +96,6 @@ interface Stats {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-/** Section separator with title */
 function Section({ title }: { title: string }) {
   return (
     <View style={styles.sectionRow}>
@@ -93,22 +104,13 @@ function Section({ title }: { title: string }) {
     </View>
   );
 }
-
-/** Horizontal divider */
 function Divider() {
   return <View style={styles.divider} />;
 }
-
-/** Label + bar + value, all fixed-width for perfect column alignment */
-function BarRow({
-  label, value, max, color,
-}: {
-  label: string; value: number; max: number; color: string;
-}) {
+function BarRow({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
   const filled = Math.round((value / max) * BAR_BARS);
-  const empty = BAR_BARS - filled;
-  const bar = '█'.repeat(filled) + '░'.repeat(empty);
-  const pct = `${String(value).padStart(3, ' ')}%`;
+  const bar    = '█'.repeat(filled) + '░'.repeat(BAR_BARS - filled);
+  const pct    = `${String(value).padStart(3, ' ')}%`;
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -117,13 +119,7 @@ function BarRow({
     </View>
   );
 }
-
-/** Label + plain value, right-aligned */
-function KVRow({
-  label, value, color = COLORS.green,
-}: {
-  label: string; value: string; color?: string;
-}) {
+function KVRow({ label, value, color = COLORS.green }: { label: string; value: string; color?: string }) {
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -131,11 +127,8 @@ function KVRow({
     </View>
   );
 }
-
-/** Two KV pairs side-by-side in one row */
 function KVDualRow({
-  labelA, valueA, colorA,
-  labelB, valueB, colorB,
+  labelA, valueA, colorA, labelB, valueB, colorB,
 }: {
   labelA: string; valueA: string; colorA?: string;
   labelB: string; valueB: string; colorB?: string;
@@ -153,51 +146,91 @@ function KVDualRow({
     </View>
   );
 }
-
-/** Battery block bar */
 function BattBar({ pct, color }: { pct: number; color: string }) {
   const filled = Math.round((pct / 100) * BAR_BARS);
-  const empty = BAR_BARS - filled;
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>BAT</Text>
-      <Text style={[styles.rowBar, { color }]}>{'█'.repeat(filled) + '░'.repeat(empty)}</Text>
+      <Text style={[styles.rowBar, { color }]}>{'█'.repeat(filled) + '░'.repeat(BAR_BARS - filled)}</Text>
       <Text style={[styles.rowValue, { color }]}>{`${pct}%`}</Text>
     </View>
   );
 }
 
-/** Single commit row */
-function CommitItem({ item }: { item: GitCommit }) {
-  const repo = shortRepo(item.repo);
-  const age  = relTime(item.timestamp);
-  const msg  = item.message.length > 36 ? `${item.message.slice(0, 35)}…` : item.message;
-  return (
-    <View style={styles.gitItem}>
-      <View style={styles.gitItemHeader}>
-        <Text style={styles.gitRepo} numberOfLines={1}>{repo}</Text>
-        <Text style={styles.gitAge}>{age}</Text>
-      </View>
-      <Text style={styles.gitMsg} numberOfLines={1}>{msg}</Text>
-    </View>
-  );
-}
+// ── Action card (large/prominent) ─────────────────────────────────────────────
 
-/** Single action run row */
-function ActionItem({ item }: { item: GitAction }) {
+function ActionItem({ item, tick }: { item: GitAction; tick: number }) {
   const [icon, iconColor] = actionIcon(item.status, item.conclusion);
-  const repo     = shortRepo(item.repo);
-  const age      = relTime(item.timestamp);
-  const wf       = item.workflow.length > 18 ? `${item.workflow.slice(0, 17)}…` : item.workflow;
-  const branch   = item.branch.length > 12 ? `${item.branch.slice(0, 11)}…` : item.branch;
+
+  const conclusionLabel =
+    item.status === 'in_progress' ? 'IN PROGRESS' :
+    item.status === 'queued'      ? 'QUEUED'       :
+    item.conclusion === 'success' ? 'SUCCESS'      :
+    item.conclusion === 'failure' ? 'FAILED'       :
+    item.conclusion === 'cancelled' ? 'CANCELLED'  : 'UNKNOWN';
+
+  const bar = progressFill(item.status, item.conclusion, tick);
+  const wf  = item.workflow.length > 22 ? `${item.workflow.slice(0, 21)}…` : item.workflow;
+  const br  = item.branch.length > 16   ? `${item.branch.slice(0, 15)}…`  : item.branch;
+  const age = relTime(item.timestamp);
+  const isRunning = item.status === 'in_progress';
+  const isQueued  = item.status === 'queued';
+  const isFailed  = item.conclusion === 'failure';
+
   return (
-    <View style={styles.gitItem}>
-      <View style={styles.gitItemHeader}>
-        <Text style={[styles.gitActionIcon, { color: iconColor }]}>{icon}</Text>
-        <Text style={styles.gitRepo} numberOfLines={1}>{repo}</Text>
-        <Text style={styles.gitAge}>{age}</Text>
+    <View style={[
+      styles.actionCard,
+      { borderLeftColor: iconColor },
+      isRunning && styles.actionCardRunning,
+      isFailed  && styles.actionCardFailed,
+    ]}>
+      {/* Row 1: icon + repo + age */}
+      <View style={styles.actionTop}>
+        {isRunning ? (
+          <Animatable.Text
+            animation="flash"
+            iterationCount="infinite"
+            duration={700}
+            style={[styles.actionIcon, { color: iconColor }]}>
+            {icon}
+          </Animatable.Text>
+        ) : (
+          <Text style={[styles.actionIcon, { color: iconColor }]}>{icon}</Text>
+        )}
+        <Text style={styles.actionRepo} numberOfLines={1}>{shortRepo(item.repo)}</Text>
+        <Text style={styles.actionAge}>{age}</Text>
       </View>
-      <Text style={styles.gitMsg} numberOfLines={1}>{`${wf} · ${branch}`}</Text>
+
+      {/* Row 2: workflow · branch */}
+      <Text style={styles.actionWf} numberOfLines={1}>{`${wf}  ·  ${br}`}</Text>
+
+      {/* Row 3: animated bar + status label */}
+      <View style={styles.actionBarRow}>
+        {isRunning ? (
+          <Animatable.Text
+            animation="flash"
+            iterationCount="infinite"
+            duration={1200}
+            style={[styles.actionBar, { color: iconColor }]}>
+            {bar}
+          </Animatable.Text>
+        ) : (
+          <Text style={[styles.actionBar, { color: iconColor }]}>{bar}</Text>
+        )}
+        <View style={[styles.actionConclusionBadge, { borderColor: iconColor }]}>
+          {(isRunning || isQueued) ? (
+            <Animatable.Text
+              animation={isRunning ? 'flash' : undefined}
+              iterationCount="infinite"
+              duration={900}
+              style={[styles.actionConclusionText, { color: iconColor }]}>
+              {conclusionLabel}
+            </Animatable.Text>
+          ) : (
+            <Text style={[styles.actionConclusionText, { color: iconColor }]}>{conclusionLabel}</Text>
+          )}
+        </View>
+      </View>
     </View>
   );
 }
@@ -208,47 +241,41 @@ export default function SysMonitorWidget() {
   const batteryLevel = useBatteryLevel();
   const powerState   = usePowerState();
 
-  // ── SYS state ──
   const [stats, setStats] = useState<Stats>({
     cpu: 38, mem: 61, gpu: 22, disk: 74,
     temp: 44, netUp: 12, netDown: 48, netPing: 18,
     processes: 218, threads: 1042, swapUsed: 28, cacheUsed: 15,
   });
-  const [quoteIdx, setQuoteIdx] = useState(0);
-  const [uptime, setUptime]     = useState(0);
-  const [deviceName, setDeviceName] = useState('ANDROID');
-  const [osVersion, setOsVersion]   = useState('--');
-  const [totalMemGB, setTotalMemGB] = useState('--');
+  const [quoteIdx,    setQuoteIdx]    = useState(0);
+  const [uptime,      setUptime]      = useState(0);
+  const [deviceName,  setDeviceName]  = useState('ANDROID');
+  const [osVersion,   setOsVersion]   = useState('--');
+  const [totalMemGB,  setTotalMemGB]  = useState('--');
+  const [animTick,    setAnimTick]    = useState(0);
   const tickRef = useRef(0);
 
-  // ── GIT state (Zustand store) ──
-  const gitCommits  = useGitStore(s => s.commits);
   const gitActions  = useGitStore(s => s.actions);
   const gitUser     = useGitStore(s => s.username);
   const gitFetched  = useGitStore(s => s.fetchedAt);
   const gitError    = useGitStore(s => s.hasError);
   const gitLoading  = useGitStore(s => s.isLoading);
-  const loadGit     = useGitStore(s => s.load);
-  const gitTickRef = useRef(0);
 
-  // ── Paging state ──
-  const [page, setPage]           = useState(0);
-  const [panelSize, setPanelSize] = useState({ width: 0, height: 0 });
+  const [page,       setPage]       = useState(0);
+  const [panelSize,  setPanelSize]  = useState({ width: 0, height: 0 });
   const hScrollRef = useRef<ScrollView>(null);
 
-  // ── Device info ──
   useEffect(() => {
     try { setDeviceName(getDeviceNameSync().toUpperCase()); } catch {}
-    try { setOsVersion(`ANDROID ${getSystemVersion()}`); } catch {}
+    try { setOsVersion(`ANDROID ${getSystemVersion()}`); }    catch {}
     try { setTotalMemGB(`${(getTotalMemorySync() / 1073741824).toFixed(1)} GB`); } catch {}
   }, []);
 
-  // ── SYS ticker ──
   useEffect(() => {
     const id = setInterval(() => {
       tickRef.current += 1;
       const tick = tickRef.current;
       setUptime(tick);
+      setAnimTick(tick);
 
       if (tick % STATS_EVERY === 0) {
         setStats(prev => {
@@ -269,58 +296,48 @@ export default function SysMonitorWidget() {
           };
         });
       }
-
       if (tick % QUOTE_EVERY === 0) {
         setQuoteIdx(i => (i + 1) % QUOTES.length);
       }
-
-      // GitHub poll every GIT_REFRESH seconds
-      gitTickRef.current += 1;
-      if (gitTickRef.current % GIT_REFRESH === 0) {
-        loadGit();
-      }
     }, 1000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── Initial GitHub fetch ──
-  useEffect(() => {
-    loadGit();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Derived SYS values ──
+  // ── Derived ──
   const hh = Math.floor(uptime / 3600);
   const mm = Math.floor((uptime % 3600) / 60);
   const ss = uptime % 60;
   const uptimeStr = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
 
-  const cpuColor  = stats.cpu  > 80 ? COLORS.red : stats.cpu  > 60 ? COLORS.amber : COLORS.green;
-  const memColor  = stats.mem  > 80 ? COLORS.red : stats.mem  > 65 ? COLORS.amber : COLORS.green;
+  const cpuColor  = stats.cpu  > 80 ? COLORS.red   : stats.cpu  > 60 ? COLORS.amber : COLORS.green;
+  const memColor  = stats.mem  > 80 ? COLORS.red   : stats.mem  > 65 ? COLORS.amber : COLORS.green;
   const gpuColor  = stats.gpu  > 70 ? COLORS.amber : COLORS.green;
-  const diskColor = stats.disk > 90 ? COLORS.red  : stats.disk > 75 ? COLORS.amber : COLORS.green;
-  const tempColor = stats.temp > 75 ? COLORS.red  : stats.temp > 60 ? COLORS.amber : COLORS.cyan;
+  const diskColor = stats.disk > 90 ? COLORS.red   : stats.disk > 75 ? COLORS.amber : COLORS.green;
+  const tempColor = stats.temp > 75 ? COLORS.red   : stats.temp > 60 ? COLORS.amber : COLORS.cyan;
   const pingColor = stats.netPing > 80 ? COLORS.red : stats.netPing > 40 ? COLORS.amber : COLORS.green;
 
   const battPct = batteryLevel != null && batteryLevel >= 0
     ? Math.round((batteryLevel as number) * 100) : null;
   const isCharging = powerState.batteryState === 'charging' || powerState.batteryState === 'full';
-  const battColor = battPct == null ? COLORS.greenDim
+  const battColor  = battPct == null ? COLORS.greenDim
     : battPct >= 60 ? COLORS.green : battPct >= 25 ? COLORS.amber : COLORS.red;
 
   const quote = QUOTES[quoteIdx];
-
   const pageIndicator = page === 0 ? '● ○' : '○ ●';
-  const pageTitle     = page === 0 ? '◈ SYS::MONITOR' : '◈ GIT::INTEL';
+  const pageTitle     = page === 0 ? '◈ SYS::MONITOR' : '◈ GIT::ACTIONS';
 
-  const fetchedStr = gitError
-    ? 'ERROR'
-    : gitLoading
-      ? 'SYNCING…'
-      : gitFetched
-        ? `SYNC ${String(gitFetched.getHours()).padStart(2,'0')}:${String(gitFetched.getMinutes()).padStart(2,'0')}`
-        : 'SYNCING…';
+  const fetchedStr = gitError   ? 'ERROR'
+    : gitLoading                ? 'SYNCING…'
+    : gitFetched
+      ? `SYNC ${String(gitFetched.getHours()).padStart(2,'0')}:${String(gitFetched.getMinutes()).padStart(2,'0')}`
+      : 'SYNCING…';
+
+  // Action status counts
+  const runningCount = gitActions.filter(a => a.status === 'in_progress').length;
+  const queuedCount  = gitActions.filter(a => a.status === 'queued').length;
+  const failedCount  = gitActions.filter(a => a.conclusion === 'failure').length;
+  const successCount = gitActions.filter(a => a.conclusion === 'success').length;
 
   return (
     <GlowBox title={pageTitle} titleRight={pageIndicator} style={styles.box} noPadding>
@@ -351,38 +368,29 @@ export default function SysMonitorWidget() {
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}>
 
-                {/* ── DEVICE ── */}
                 <Section title="DEVICE" />
                 <KVRow label="NODE" value={deviceName} color={COLORS.greenBright} />
                 <KVRow label="OS  " value={osVersion} />
                 <KVRow label="RAM " value={totalMemGB} />
                 <KVRow label="UP  " value={uptimeStr} color={COLORS.cyan} />
-
                 <Divider />
 
-                {/* ── COMPUTE ── */}
                 <Section title="COMPUTE" />
-                <BarRow label="CPU " value={stats.cpu} max={100} color={cpuColor} />
-                <BarRow label="GPU " value={stats.gpu} max={100} color={gpuColor} />
-                <KVRow  label="TEMP" value={`${stats.temp} °C`} color={tempColor} />
-
+                <BarRow label="CPU " value={stats.cpu}  max={100} color={cpuColor} />
+                <BarRow label="GPU " value={stats.gpu}  max={100} color={gpuColor} />
+                <KVRow  label="TEMP" value={`${stats.temp} °C`}   color={tempColor} />
                 <Divider />
 
-                {/* ── MEMORY ── */}
                 <Section title="MEMORY" />
-                <BarRow label="MEM " value={stats.mem}      max={100} color={memColor} />
-                <BarRow label="SWAP" value={stats.swapUsed} max={100} color={COLORS.greenDim} />
+                <BarRow label="MEM " value={stats.mem}       max={100} color={memColor} />
+                <BarRow label="SWAP" value={stats.swapUsed}  max={100} color={COLORS.greenDim} />
                 <BarRow label="CCHE" value={stats.cacheUsed} max={100} color={COLORS.greenFaint} />
-
                 <Divider />
 
-                {/* ── STORAGE ── */}
                 <Section title="STORAGE" />
                 <BarRow label="DISK" value={stats.disk} max={100} color={diskColor} />
-
                 <Divider />
 
-                {/* ── NETWORK ── */}
                 <Section title="NETWORK" />
                 <View style={styles.row}>
                   <Text style={styles.rowLabel}>{'UP  '}</Text>
@@ -395,17 +403,14 @@ export default function SysMonitorWidget() {
                   <Text style={[styles.rowValue, { color: COLORS.amber }]}> </Text>
                 </View>
                 <KVRow label="PING" value={`${stats.netPing} ms`} color={pingColor} />
-
                 <Divider />
 
-                {/* ── PROCESSES ── */}
                 <Section title="PROCESSES" />
                 <KVDualRow
                   labelA="PROC" valueA={String(stats.processes)} colorA={COLORS.green}
                   labelB="THRD" valueB={String(stats.threads)}   colorB={COLORS.greenDim}
                 />
 
-                {/* ── POWER ── */}
                 {battPct != null && (
                   <>
                     <Divider />
@@ -418,10 +423,8 @@ export default function SysMonitorWidget() {
                     />
                   </>
                 )}
-
                 <Divider />
 
-                {/* ── THOUGHT STREAM ── */}
                 <Section title="THOUGHT STREAM" />
                 <Animated.View key={quoteIdx} entering={FadeIn.duration(800)}>
                   <Text style={styles.quoteText}>{`"${quote.text}"`}</Text>
@@ -432,55 +435,76 @@ export default function SysMonitorWidget() {
               </ScrollView>
             </View>
 
-            {/* ══════════════ PAGE 1 · GIT::INTEL ══════════════ */}
+            {/* ══════════════ PAGE 1 · GIT::ACTIONS ══════════════ */}
             <View style={{ width: panelSize.width, height: panelSize.height }}>
               <ScrollView
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}>
 
-                {/* ── IDENTITY ── */}
+                {/* ── Header ── */}
                 <View style={styles.gitHeader}>
                   <Text style={styles.gitUser}>{gitUser ? `@${gitUser}` : '...'}</Text>
-                  <Text style={styles.gitSync}>{fetchedStr}</Text>
+                  <Text style={[styles.gitSync, gitError && { color: COLORS.red }]}>{fetchedStr}</Text>
                 </View>
 
                 <Divider />
 
-                {/* ── RECENT COMMITS ── */}
-                <Section title="ACTIVITY" />
+                {/* ── Summary dashboard ── */}
+                {gitActions.length > 0 && (
+                  <View style={styles.summaryGrid}>
+                    <View style={[styles.summaryCell, { borderColor: COLORS.amber }]}>
+                      <Text style={[styles.summaryNum, { color: runningCount > 0 ? COLORS.amber : COLORS.greenFaint }]}>
+                        {runningCount > 0 ? (
+                          <Animatable.Text animation="flash" iterationCount="infinite" duration={700}
+                            style={[styles.summaryNum, { color: COLORS.amber }]}>
+                            {String(runningCount)}
+                          </Animatable.Text>
+                        ) : '0'}
+                      </Text>
+                      <Text style={styles.summaryLabel}>RUNNING</Text>
+                    </View>
+                    <View style={[styles.summaryCell, { borderColor: COLORS.greenDim }]}>
+                      <Text style={[styles.summaryNum, { color: queuedCount > 0 ? COLORS.greenDim : COLORS.greenFaint }]}>
+                        {String(queuedCount)}
+                      </Text>
+                      <Text style={styles.summaryLabel}>QUEUED</Text>
+                    </View>
+                    <View style={[styles.summaryCell, { borderColor: COLORS.green }]}>
+                      <Text style={[styles.summaryNum, { color: successCount > 0 ? COLORS.green : COLORS.greenFaint }]}>
+                        {String(successCount)}
+                      </Text>
+                      <Text style={styles.summaryLabel}>SUCCESS</Text>
+                    </View>
+                    <View style={[styles.summaryCell, { borderColor: COLORS.red }]}>
+                      <Text style={[styles.summaryNum, { color: failedCount > 0 ? COLORS.red : COLORS.greenFaint }]}>
+                        {String(failedCount)}
+                      </Text>
+                      <Text style={styles.summaryLabel}>FAILED</Text>
+                    </View>
+                  </View>
+                )}
+
+                <Divider />
+
+                {/* ── Section title ── */}
+                <Section title="WORKFLOW RUNS" />
 
                 {gitError && (
                   <Text style={styles.gitErrorText}>⚠ CONNECTION FAILED</Text>
                 )}
-
-                {gitLoading && gitCommits.length === 0 && (
-                  <Text style={styles.gitDimText}>FETCHING…</Text>
-                )}
-
-                {!gitLoading && !gitError && gitCommits.length === 0 && (
-                  <Text style={styles.gitDimText}>NO ACTIVITY</Text>
-                )}
-
-                {gitCommits.map((item, idx) => (
-                  <CommitItem key={`c${idx}`} item={item} />
-                ))}
-
-                <Divider />
-
-                {/* ── ACTIONS ── */}
-                <Section title="ACTIONS" />
-
                 {gitLoading && gitActions.length === 0 && (
-                  <Text style={styles.gitDimText}>FETCHING…</Text>
+                  <Animatable.Text animation="flash" iterationCount="infinite" duration={800}
+                    style={styles.gitDimText}>
+                    {'FETCHING ACTIONS…'}
+                  </Animatable.Text>
                 )}
-
                 {!gitLoading && !gitError && gitActions.length === 0 && (
-                  <Text style={styles.gitDimText}>NO ACTIONS</Text>
+                  <Text style={styles.gitDimText}>NO WORKFLOW RUNS</Text>
                 )}
 
                 {gitActions.map((item, idx) => (
-                  <ActionItem key={`a${idx}`} item={item} />
+                  <ActionItem key={`a${idx}`} item={item} tick={animTick} />
                 ))}
 
                 <View style={{ height: SPACING.md }} />
@@ -497,171 +521,131 @@ export default function SysMonitorWidget() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  box: { flex: 1 },
-  scroll: { flex: 1 },
+  box:           { flex: 1 },
+  scroll:        { flex: 1 },
   scrollContent: { paddingHorizontal: SPACING.sm, paddingTop: SPACING.xs },
 
-  // Section header
-  sectionRow: {
+  sectionRow:  { flexDirection: 'row', alignItems: 'center', marginTop: 4, marginBottom: 4 },
+  sectionTitle:{ fontFamily: FONTS.mono, color: COLORS.greenFaint, fontSize: 9, letterSpacing: 2, marginRight: 6 },
+  sectionLine: { flex: 1, height: 1, backgroundColor: COLORS.greenFaint, opacity: 0.4 },
+  divider:     { height: 1, backgroundColor: COLORS.greenFaint, marginVertical: 4, opacity: 0.3 },
+
+  row:          { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
+  rowLabel:     { fontFamily: FONTS.mono, color: COLORS.greenDim, fontSize: 10, letterSpacing: 1, width: LABEL_W },
+  rowBar:       { fontFamily: FONTS.mono, fontSize: 10, flex: 1, letterSpacing: -0.5 },
+  rowValue:     { fontFamily: FONTS.mono, fontSize: 10, width: VALUE_W, textAlign: 'right', letterSpacing: 0.5 },
+  rowValueFull: { flex: 1, width: undefined },
+
+  dualRow:   { flexDirection: 'row', marginBottom: 3 },
+  dualCell:  { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  dualValue: { fontFamily: FONTS.mono, fontSize: 10, letterSpacing: 0.5, flex: 1, textAlign: 'right', paddingRight: 4 },
+
+  quoteText: { fontFamily: FONTS.mono, color: COLORS.green, fontSize: 10, lineHeight: 16, fontStyle: 'italic', marginBottom: 3 },
+  quoteSrc:  { fontFamily: FONTS.mono, color: COLORS.greenDim, fontSize: 9, letterSpacing: 0.5 },
+
+  // ── Git header ──
+  gitHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  gitUser:   { fontFamily: FONTS.mono, color: COLORS.greenBright, fontSize: 10, letterSpacing: 1, fontWeight: '700' },
+  gitSync:   { fontFamily: FONTS.mono, color: COLORS.greenDim, fontSize: 9, letterSpacing: 0.5 },
+
+  // ── Summary grid ──
+  summaryGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 4,
+    gap: 3,
+    marginBottom: SPACING.xs,
   },
-  sectionTitle: {
+  summaryCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderWidth: 1,
+    backgroundColor: 'rgba(0,255,65,0.03)',
+  },
+  summaryNum: {
+    fontFamily: FONTS.mono,
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  summaryLabel: {
     fontFamily: FONTS.mono,
     color: COLORS.greenFaint,
-    fontSize: 9,
-    letterSpacing: 2,
-    marginRight: 6,
-  },
-  sectionLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: COLORS.greenFaint,
-    opacity: 0.4,
+    fontSize: 7,
+    letterSpacing: 1.5,
+    marginTop: 2,
   },
 
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.greenFaint,
-    marginVertical: 4,
-    opacity: 0.3,
+  // ── Action card (large/prominent) ──
+  actionCard: {
+    borderLeftWidth: 4,
+    paddingLeft: SPACING.sm,
+    paddingVertical: 8,
+    marginBottom: SPACING.sm,
+    backgroundColor: 'rgba(0, 255, 65, 0.03)',
+    borderRadius: 1,
   },
-
-  // Universal row: [label | content | value]
-  row: {
+  actionCardRunning: {
+    backgroundColor: 'rgba(255, 176, 0, 0.06)',
+  },
+  actionCardFailed: {
+    backgroundColor: 'rgba(255, 51, 51, 0.06)',
+  },
+  actionTop: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 3,
-  },
-  rowLabel: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenDim,
-    fontSize: 10,
-    letterSpacing: 1,
-    width: LABEL_W,
-  },
-  rowBar: {
-    fontFamily: FONTS.mono,
-    fontSize: 10,
-    flex: 1,
-    letterSpacing: -0.5,
-  },
-  rowValue: {
-    fontFamily: FONTS.mono,
-    fontSize: 10,
-    width: VALUE_W,
-    textAlign: 'right',
-    letterSpacing: 0.5,
-  },
-  rowValueFull: {
-    flex: 1,
-    width: undefined,
-  },
-
-  // Dual KV row (two columns)
-  dualRow: {
-    flexDirection: 'row',
-    marginBottom: 3,
-  },
-  dualCell: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dualValue: {
-    fontFamily: FONTS.mono,
-    fontSize: 10,
-    letterSpacing: 0.5,
-    flex: 1,
-    textAlign: 'right',
-    paddingRight: 4,
-  },
-
-  // Quote
-  quoteText: {
-    fontFamily: FONTS.mono,
-    color: COLORS.green,
-    fontSize: 10,
-    lineHeight: 16,
-    fontStyle: 'italic',
-    marginBottom: 3,
-  },
-  quoteSrc: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenDim,
-    fontSize: 9,
-    letterSpacing: 0.5,
-  },
-
-  // ── Git panel ──────────────────────────────────────────────────────────────
-  gitHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
   },
-  gitUser: {
+  actionIcon: {
     fontFamily: FONTS.mono,
-    color: COLORS.greenBright,
-    fontSize: 10,
-    letterSpacing: 1,
+    fontSize: 16,
+    width: 22,
     fontWeight: '700',
   },
-  gitSync: {
+  actionRepo: {
     fontFamily: FONTS.mono,
-    color: COLORS.greenDim,
-    fontSize: 9,
-    letterSpacing: 0.5,
-  },
-
-  gitItem: {
-    marginBottom: 5,
-  },
-  gitItemHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 1,
-  },
-  gitActionIcon: {
-    fontFamily: FONTS.mono,
-    fontSize: 10,
-    width: 14,
-  },
-  gitRepo: {
-    fontFamily: FONTS.mono,
-    color: COLORS.cyan,
-    fontSize: 9,
+    color: COLORS.greenBright,
+    fontSize: 12,
     letterSpacing: 0.5,
     flex: 1,
+    fontWeight: '700',
   },
-  gitAge: {
+  actionAge: {
     fontFamily: FONTS.mono,
     color: COLORS.greenDim,
-    fontSize: 9,
-    marginLeft: 4,
+    fontSize: 10,
   },
-  gitMsg: {
+  actionWf: {
     fontFamily: FONTS.mono,
-    color: COLORS.green,
-    fontSize: 9,
+    color: COLORS.greenDim,
+    fontSize: 10,
     letterSpacing: 0.3,
-    paddingLeft: 2,
+    marginBottom: 5,
+    paddingLeft: 22,
+  },
+  actionBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 22,
+    gap: 8,
+  },
+  actionBar: {
+    fontFamily: FONTS.mono,
+    fontSize: 11,
+    letterSpacing: -0.5,
+    flex: 1,
+  },
+  actionConclusionBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  actionConclusionText: {
+    fontFamily: FONTS.mono,
+    fontSize: 9,
+    letterSpacing: 2,
+    fontWeight: '700',
   },
 
-  gitErrorText: {
-    fontFamily: FONTS.mono,
-    color: COLORS.red,
-    fontSize: 10,
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  gitDimText: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenFaint,
-    fontSize: 10,
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
+  gitErrorText: { fontFamily: FONTS.mono, color: COLORS.red, fontSize: 10, letterSpacing: 1, marginBottom: 4 },
+  gitDimText:   { fontFamily: FONTS.mono, color: COLORS.greenFaint, fontSize: 10, letterSpacing: 1, marginBottom: 4 },
 });

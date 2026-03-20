@@ -1,6 +1,7 @@
 import { NOTION_API_KEY } from '@env';
 import { notionClient } from './client';
 import {
+  CommunityFeedItem,
   NotionBlock,
   NotionDatabaseListItem,
   NotionPageListItem,
@@ -218,4 +219,44 @@ export async function fetchPageInfo(
 
 export function richTextToPlain(richText: NotionRichText[]): string {
   return richText.map(rt => rt.plain_text).join('');
+}
+
+// ── Community feed ────────────────────────────────────────────────────────────
+
+const COMMUNITY_DB_ID = '7da5192d76f2422293e66e31e4368d8d';
+
+export async function fetchCommunityFeedItems(): Promise<CommunityFeedItem[]> {
+  const res = await notionClient.post(`/databases/${COMMUNITY_DB_ID}/query`, {
+    page_size: 20,
+    sorts: [{ direction: 'descending', timestamp: 'created_time' }],
+  });
+
+  return (res.data.results as Record<string, unknown>[]).map(page => {
+    const props = page.properties as Record<string, Record<string, unknown>>;
+
+    const titleArr = (props['제목']?.title as Array<{ plain_text: string }>) ?? [];
+    const title = titleArr.map(t => t.plain_text).join('') || '(제목 없음)';
+
+    const summaryArr = (props['내용요약']?.rich_text as Array<{ plain_text: string }>) ?? [];
+    const summary = summaryArr.map(t => t.plain_text).join('');
+
+    const platform = (props['플랫폼']?.select as { name: string } | null)?.name ?? '';
+    const category = (props['카테고리']?.select as { name: string } | null)?.name ?? '';
+    const views = (props['조회수']?.number as number) ?? 0;
+    const comments = (props['댓글수']?.number as number) ?? 0;
+    const writtenAt = (props['작성일']?.date as { start: string } | null)?.start ?? null;
+    const url = (props['원문링크']?.url as string) ?? null;
+
+    return {
+      id: page.id as string,
+      title,
+      summary,
+      platform,
+      category,
+      views,
+      comments,
+      writtenAt,
+      url,
+    };
+  });
 }

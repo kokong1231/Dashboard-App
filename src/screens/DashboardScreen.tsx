@@ -5,6 +5,7 @@ import { useWeatherStore } from '@/store/useWeatherStore';
 import { useNewsStore } from '@/store/useNewsStore';
 import { useNotionStore } from '@/store/useNotionStore';
 import { useGitStore } from '@/store/useGitStore';
+import { useCommunityStore } from '@/store/useCommunityStore';
 import MatrixBackground from '@/components/MatrixBackground';
 import HeaderBar from '@/components/HeaderBar';
 import WeatherWidget from '@/components/WeatherWidget';
@@ -20,8 +21,14 @@ export default function DashboardScreen() {
   const fetchWeather = useWeatherStore(s => s.fetch);
   const fetchNews = useNewsStore(s => s.fetch);
   const fetchNotion = useNotionStore(s => s.fetch);
-  const loadGit        = useGitStore(s => s.load);
-  const loadGitActions = useGitStore(s => s.loadActions);
+  const loadGit          = useGitStore(s => s.load);
+  const loadGitActions   = useGitStore(s => s.loadActions);
+  const gitActions       = useGitStore(s => s.actions);
+  const fetchCommunity   = useCommunityStore(s => s.fetch);
+
+  // Adaptive polling interval: 10s when a run is in-progress, 30s otherwise
+  const hasRunning = gitActions.some(a => a.status === 'in_progress');
+  const actionsInterval = hasRunning ? 10000 : 30000;
 
   // Initial fetch
   useEffect(() => {
@@ -30,6 +37,7 @@ export default function DashboardScreen() {
     fetchNotion();
     loadGit();
     loadGitActions();
+    fetchCommunity();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -41,8 +49,8 @@ export default function DashboardScreen() {
     loadGit();
   }, 10000);
 
-  // Workflow runs: every 5 min — heavier (1 + 5 API calls per poll)
-  useInterval(loadGitActions, 300000);
+  // Workflow runs: adaptive — 10s when in_progress, 30s otherwise
+  useInterval(loadGitActions, actionsInterval);
 
   return (
     <View style={styles.root}>
