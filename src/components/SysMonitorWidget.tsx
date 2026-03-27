@@ -10,6 +10,8 @@ import {
   getTotalMemorySync,
 } from 'react-native-device-info';
 import GlowBox from './GlowBox';
+import CommunityPage from './CommunityPage';
+import SentryPage from './SentryPage';
 import { COLORS, FONTS, SPACING } from '@/theme';
 import { GitAction } from '@/api/githubApi';
 import { useGitStore } from '@/store/useGitStore';
@@ -324,8 +326,10 @@ export default function SysMonitorWidget() {
     : battPct >= 60 ? COLORS.green : battPct >= 25 ? COLORS.amber : COLORS.red;
 
   const quote = QUOTES[quoteIdx];
-  const pageIndicator = page === 0 ? '● ○' : '○ ●';
-  const pageTitle     = page === 0 ? '◈ SYS::MONITOR' : '◈ GIT::ACTIONS';
+  const PAGE_DOTS   = ['● ○ ○ ○', '○ ● ○ ○', '○ ○ ● ○', '○ ○ ○ ●'];
+  const PAGE_TITLES = ['◈ SYS::MONITOR', '◈ GIT::ACTIONS', '◈ COMMUNITY::FEED', '◈ SENTRY::ERR_LOG'];
+  const pageIndicator = PAGE_DOTS[page]   ?? PAGE_DOTS[0];
+  const pageTitle     = PAGE_TITLES[page] ?? PAGE_TITLES[0];
 
   const fetchedStr = gitError   ? 'ERROR'
     : gitLoading                ? 'SYNCING…'
@@ -510,6 +514,12 @@ export default function SysMonitorWidget() {
                 <View style={{ height: SPACING.md }} />
               </ScrollView>
             </View>
+
+            {/* ══════════════ PAGE 2 · COMMUNITY::FEED ══════════════ */}
+            <CommunityPage width={panelSize.width} height={panelSize.height} />
+
+            {/* ══════════════ PAGE 3 · SENTRY::ERR_LOG ══════════════ */}
+            <SentryPage width={panelSize.width} height={panelSize.height} />
 
           </ScrollView>
         )}
