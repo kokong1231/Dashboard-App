@@ -12,7 +12,7 @@ module.exports = {
       'module:react-native-dotenv',
       {
         moduleName: '@env',
-        path: '.env',
+        path: '.env.jin',
         safe: false,
         allowUndefined: false,
       },

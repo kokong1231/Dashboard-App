@@ -2,32 +2,28 @@ import React, { useEffect } from 'react';
 import { Platform, StatusBar, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInUp, SlideInLeft, SlideInRight } from 'react-native-reanimated';
 import { useWeatherStore } from '@/store/useWeatherStore';
-import { useNewsStore } from '@/store/useNewsStore';
 import { useNotionStore } from '@/store/useNotionStore';
 import HeaderBar from '@/components/HeaderBar';
 import WeatherWidget from '@/components/WeatherWidget';
 import CalendarWidget from '@/components/CalendarWidget';
 import NotionWidget from '@/components/NotionWidget';
-import NewsWidget from '@/components/NewsWidget';
+import CanvasWidget from '@/components/CanvasWidget';
 import SysMonitorWidget from '@/components/SysMonitorWidget';
 import { COLORS, SPACING } from '@/theme';
 import { useInterval } from '@/hooks/useInterval';
 
 export default function DashboardScreen() {
   const fetchWeather = useWeatherStore(s => s.fetch);
-  const fetchNews = useNewsStore(s => s.fetch);
   const fetchNotion = useNotionStore(s => s.fetch);
 
   useEffect(() => {
     fetchWeather();
-    fetchNews();
     fetchNotion();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useInterval(() => {
     fetchWeather();
-    fetchNews();
     fetchNotion();
   }, 30000);
 
@@ -60,7 +56,7 @@ export default function DashboardScreen() {
           <Animated.View entering={SlideInRight.duration(500).delay(150)} style={styles.colRight}>
             <View style={styles.rightStack}>
               <View style={styles.newsArea}>
-                <NewsWidget />
+                <CanvasWidget />
               </View>
               <View style={styles.sysArea}>
                 <SysMonitorWidget />
