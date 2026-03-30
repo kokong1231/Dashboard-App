@@ -66,6 +66,12 @@ yarn-error.log
 # env — API keys (do not commit)
 .env
 .env.local
+.env.*
+!.env.example
+
+# Android JS bundle (build artifact — contains inlined env values)
+android/app/src/main/assets/index.android.bundle
+android/app/src/main/assets/index.android.bundle.map
 
 # testing
 /coverage
