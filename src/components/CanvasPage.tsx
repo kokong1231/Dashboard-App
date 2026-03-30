@@ -37,6 +37,11 @@ interface BroadcastMsg {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Server wraps all socket events as: { key: 'broadcast', ...payload }
+function emitBroadcast(socket: Socket | null, payload: BroadcastMsg) {
+  socket?.emit('message', { key: 'broadcast', ...payload });
+}
+
 function toSvgPath(pts: NPoint[], sw: number, sh: number): string {
   if (pts.length === 0) return '';
   return (
@@ -91,12 +96,16 @@ export default function CanvasPage({ width, height }: { width: number; height: n
 
     socket.on('connect', () => {
       setConnected(true);
-      socket.emit('broadcast', { who: MY_WHO, eventType: 'live', data: null });
+      // Announce current status on (re)connect so partner gets up-to-date state
+      emitBroadcast(socket, { who: MY_WHO, eventType: myStatusRef.current, data: null });
     });
 
     socket.on('disconnect', () => setConnected(false));
 
-    socket.on('broadcast', (msg: BroadcastMsg) => {
+    // Server protocol: all events use 'message' with { key: 'broadcast', ...payload }
+    socket.on('message', (raw: { key: string } & BroadcastMsg) => {
+      if (raw.key !== 'broadcast') return;
+      const msg: BroadcastMsg = raw;
       if (msg.who !== PARTNER_WHO) return;
 
       if (msg.eventType === 'live') {
@@ -138,7 +147,7 @@ export default function CanvasPage({ width, height }: { width: number; height: n
       if (myStatusRef.current === 'live' && Date.now() - lastTouchRef.current >= AFK_TIMEOUT_MS) {
         myStatusRef.current = 'wait';
         setMyStatus('wait');
-        socketRef.current?.emit('broadcast', { who: MY_WHO, eventType: 'wait', data: null });
+        emitBroadcast(socketRef.current, { who: MY_WHO, eventType: 'wait', data: null });
       }
     }, 60_000);
     return () => clearInterval(iv);
@@ -152,13 +161,13 @@ export default function CanvasPage({ width, height }: { width: number; height: n
         if (myStatusRef.current === 'live') {
           myStatusRef.current = 'wait';
           setMyStatus('wait');
-          socketRef.current?.emit('broadcast', { who: MY_WHO, eventType: 'wait', data: null });
+          emitBroadcast(socketRef.current, { who: MY_WHO, eventType: 'wait', data: null });
         }
       } else {
         lastTouchRef.current = Date.now();
         myStatusRef.current = 'live';
         setMyStatus('live');
-        socketRef.current?.emit('broadcast', { who: MY_WHO, eventType: 'live', data: null });
+        emitBroadcast(socketRef.current, { who: MY_WHO, eventType: 'live', data: null });
       }
     });
     return () => sub.remove();
@@ -172,20 +181,20 @@ export default function CanvasPage({ width, height }: { width: number; height: n
     remotePathsRef.current = [];
     remoteInProgressRef.current.clear();
     bump();
-    socketRef.current?.emit('broadcast', { who: MY_WHO, eventType: 'drawReset', data: null });
+    emitBroadcast(socketRef.current, { who: MY_WHO, eventType: 'drawReset', data: null });
   }
 
   function handleSetLive() {
     lastTouchRef.current = Date.now();
     myStatusRef.current = 'live';
     setMyStatus('live');
-    socketRef.current?.emit('broadcast', { who: MY_WHO, eventType: 'live', data: null });
+    emitBroadcast(socketRef.current, { who: MY_WHO, eventType: 'live', data: null });
   }
 
   function handleSetWait() {
     myStatusRef.current = 'wait';
     setMyStatus('wait');
-    socketRef.current?.emit('broadcast', { who: MY_WHO, eventType: 'wait', data: null });
+    emitBroadcast(socketRef.current, { who: MY_WHO, eventType: 'wait', data: null });
   }
 
   // ── PanResponder ────────────────────────────────────────────────────────────
@@ -198,6 +207,12 @@ export default function CanvasPage({ width, height }: { width: number; height: n
 
       onPanResponderGrant: e => {
         lastTouchRef.current = Date.now();
+        // Auto-restore live status when drawing starts
+        if (myStatusRef.current === 'wait') {
+          myStatusRef.current = 'live';
+          setMyStatus('live');
+          emitBroadcast(socketRef.current, { who: MY_WHO, eventType: 'live', data: null });
+        }
         const { locationX, locationY } = e.nativeEvent;
         const { width: sw, height: sh } = canvasSizeRef.current;
         if (!sw || !sh) return;
@@ -220,7 +235,7 @@ export default function CanvasPage({ width, height }: { width: number; height: n
         if (batchBufferRef.current.length >= BATCH_SIZE) {
           if (batchTimerRef.current) { clearTimeout(batchTimerRef.current); batchTimerRef.current = null; }
           const pts = batchBufferRef.current.splice(0);
-          socketRef.current?.emit('broadcast', {
+          emitBroadcast(socketRef.current, {
             who: MY_WHO, eventType: 'drawing',
             data: { strokeId: strokeIdRef.current, points: pts, isEnd: false },
           });
@@ -230,7 +245,7 @@ export default function CanvasPage({ width, height }: { width: number; height: n
             batchTimerRef.current = null;
             if (batchBufferRef.current.length > 0) {
               const pts = batchBufferRef.current.splice(0);
-              socketRef.current?.emit('broadcast', {
+              emitBroadcast(socketRef.current, {
                 who: MY_WHO, eventType: 'drawing',
                 data: { strokeId: strokeIdRef.current, points: pts, isEnd: false },
               });
@@ -243,11 +258,13 @@ export default function CanvasPage({ width, height }: { width: number; height: n
       onPanResponderRelease: () => {
         if (batchTimerRef.current) { clearTimeout(batchTimerRef.current); batchTimerRef.current = null; }
         const pts = batchBufferRef.current.splice(0);
-        // Send final batch with isEnd: true
-        socketRef.current?.emit('broadcast', {
-          who: MY_WHO, eventType: 'drawing',
-          data: { strokeId: strokeIdRef.current, points: pts, isEnd: true },
-        });
+        // Send final batch with isEnd: true (send even if pts is empty to close the stroke on remote)
+        if (strokeIdRef.current) {
+          emitBroadcast(socketRef.current, {
+            who: MY_WHO, eventType: 'drawing',
+            data: { strokeId: strokeIdRef.current, points: pts, isEnd: true },
+          });
+        }
         if (localCurrentRef.current.length > 0) {
           localPathsRef.current.push([...localCurrentRef.current]);
           localCurrentRef.current = [];
