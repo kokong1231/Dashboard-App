@@ -2,7 +2,7 @@ import { NOTION_API_KEY } from '@env';
 import { notionClient } from './client';
 import { NotionBlock, NotionDatabaseListItem, NotionPageListItem, NotionRichText } from '@/types';
 
-notionClient.defaults.headers.common['Authorization'] = `${NOTION_API_KEY}`;
+notionClient.defaults.headers.common['Authorization'] = `Bearer ${NOTION_API_KEY}`;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
