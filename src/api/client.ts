@@ -40,15 +40,6 @@ export function createApiClient(
   return client;
 }
 
-// ────────────────────────────────────────────────────────────────────────────────
-// Notion API 클라이언트
-// Authorization 토큰은 환경변수 또는 useAuthStore에서 주입
-// ────────────────────────────────────────────────────────────────────────────────
-export const notionClient = createApiClient('https://api.notion.com/v1', {
-  'Notion-Version': '2022-06-28',
-  // Authorization: `Bearer ${NOTION_API_KEY}` — 런타임에 주입
-});
-
 // 기본 export — 프로젝트 자체 백엔드가 생길 경우 사용
 const apiClient = createApiClient('https://api.example.com');
 
