@@ -6,6 +6,7 @@ import { useNewsStore } from '@/store/useNewsStore';
 import { useNotionStore } from '@/store/useNotionStore';
 import { useGitStore } from '@/store/useGitStore';
 import { useCommunityStore } from '@/store/useCommunityStore';
+import { useClaudeStore } from '@/store/useClaudeStore';
 import MatrixBackground from '@/components/MatrixBackground';
 import HeaderBar from '@/components/HeaderBar';
 import WeatherWidget from '@/components/WeatherWidget';
@@ -25,6 +26,7 @@ export default function DashboardScreen() {
   const loadGitActions   = useGitStore(s => s.loadActions);
   const gitActions       = useGitStore(s => s.actions);
   const fetchCommunity   = useCommunityStore(s => s.fetch);
+  const fetchClaude      = useClaudeStore(s => s.fetch);
 
   // Adaptive polling interval: 10s when a run is in-progress, 30s otherwise
   const hasRunning = gitActions.some(a => a.status === 'in_progress');
@@ -38,6 +40,7 @@ export default function DashboardScreen() {
     loadGit();
     loadGitActions();
     fetchCommunity();
+    fetchClaude();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
