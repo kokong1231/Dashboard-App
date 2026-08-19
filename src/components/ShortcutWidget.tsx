@@ -141,7 +141,12 @@ export default function ShortcutWidget() {
   const active = SHORTCUT_PROGRAMS[activeIndex] ?? SHORTCUT_PROGRAMS[0];
 
   return (
-    <GlowBox title="SHORTCUT KEYS" titleRight={`${TOTAL_SHORTCUT_COUNT} keys`} noPadding>
+    <GlowBox
+      title="SHORTCUT KEYS"
+      titleRight={`${TOTAL_SHORTCUT_COUNT} keys`}
+      style={styles.box}
+      noPadding
+    >
       {/* 프로그램 탭 */}
       <View style={styles.tabs}>
         {SHORTCUT_PROGRAMS.map((program, i) => {
@@ -227,6 +232,8 @@ export default function ShortcutWidget() {
 }
 
 const styles = StyleSheet.create({
+  box: { flex: 1 },
+
   // 탭
   tabs: {
     flexDirection: 'row',
