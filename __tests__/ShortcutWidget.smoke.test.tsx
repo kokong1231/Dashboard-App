@@ -17,7 +17,7 @@ test('단축키 위젯이 렌더링된다', async () => {
   const json = JSON.stringify(tree!.toJSON());
   expect(json).toContain('한글');
   expect(json).toContain('Figma');
-  expect(json).toContain('Word');
+  expect(json).toContain('PPT');
 
   await ReactTestRenderer.act(() => {
     tree!.unmount();
