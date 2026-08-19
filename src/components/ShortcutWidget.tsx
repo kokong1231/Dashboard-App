@@ -1,4 +1,11 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -10,26 +17,48 @@ import {
 } from 'react-native';
 import GlowBox from './GlowBox';
 import KeyCombo from './Keycap';
+import ShortcutSearchModal from './ShortcutSearchModal';
 import {
   countShortcuts,
+  getShortcutId,
+  SHORTCUT_INDEX,
+  SHORTCUT_INDEX_BY_ID,
   SHORTCUT_PROGRAMS,
-  ShortcutCategory,
   ShortcutProgram,
   TOTAL_SHORTCUT_COUNT,
 } from '@/constants/shortcuts';
+import { useShortcutStore } from '@/store/useShortcutStore';
 import { COLORS, FONTS, RADIUS, SPACING } from '@/theme';
+
+const FAVORITES_CATEGORY_ID = 'favorites';
+
+// ── 렌더링용 단축키 · 카테고리 (즐겨찾기 카테고리를 동일한 모양으로 합성하기 위함) ──────
+
+interface RenderableShortcut {
+  id: string;
+  keys: string;
+  desc: string;
+}
+
+interface RenderCategory {
+  id: string;
+  title: string;
+  icon: string;
+  items: RenderableShortcut[];
+}
 
 // ── 카테고리 한 덩어리 ────────────────────────────────────────────────────────
 
-interface CategorySectionProps {
-  category: ShortcutCategory;
+interface CategoryHeaderProps {
+  category: RenderCategory;
   accent: string;
   accentDim: string;
+  registerRef: (node: View | null) => void;
 }
 
-function CategoryHeader({ category, accent, accentDim }: CategorySectionProps) {
+function CategoryHeader({ category, accent, accentDim, registerRef }: CategoryHeaderProps) {
   return (
-    <View style={styles.catHeader}>
+    <View ref={registerRef} testID={`shortcut-category-${category.id}`} style={styles.catHeader}>
       <View style={[styles.catBar, { backgroundColor: accent }]} />
       <Text style={styles.catIcon}>{category.icon}</Text>
       <Text style={styles.catTitle} numberOfLines={1}>
@@ -42,43 +71,142 @@ function CategoryHeader({ category, accent, accentDim }: CategorySectionProps) {
   );
 }
 
-function CategoryBody({ category, accent }: Omit<CategorySectionProps, 'accentDim'>) {
+interface CategoryBodyProps {
+  category: RenderCategory;
+  accent: string;
+  favorites: string[];
+  highlightedId: string | null;
+  onToggleFavorite: (id: string) => void;
+  registerItemRef: (id: string, node: View | null) => void;
+}
+
+function CategoryBody({
+  category,
+  accent,
+  favorites,
+  highlightedId,
+  onToggleFavorite,
+  registerItemRef,
+}: CategoryBodyProps) {
   return (
     <View style={styles.catBody}>
-      {category.items.map((item, i) => (
-        <View
-          key={`${category.id}-${item.keys}-${i}`}
-          style={[styles.row, i % 2 === 1 && styles.rowAlt]}
-        >
-          <View style={styles.rowKeys}>
-            <KeyCombo keys={item.keys} accent={accent} />
+      {category.items.map((item, i) => {
+        const isFavorite = favorites.includes(item.id);
+        const isHighlighted = item.id === highlightedId;
+        return (
+          <View
+            key={item.id}
+            ref={node => registerItemRef(item.id, node)}
+            style={[
+              styles.row,
+              i % 2 === 1 && styles.rowAlt,
+              isHighlighted && styles.rowHighlighted,
+            ]}
+          >
+            <View style={styles.rowKeys}>
+              <KeyCombo keys={item.keys} accent={accent} />
+            </View>
+            <Text style={styles.rowDesc} numberOfLines={2}>
+              {item.desc}
+            </Text>
+            <TouchableOpacity
+              testID={`shortcut-star-${item.id}`}
+              onPress={() => onToggleFavorite(item.id)}
+              hitSlop={8}
+              style={styles.starButton}
+              accessibilityLabel={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+            >
+              <Text style={[styles.starIcon, isFavorite && styles.starIconActive]}>
+                {isFavorite ? '★' : '☆'}
+              </Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.rowDesc} numberOfLines={2}>
-            {item.desc}
-          </Text>
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
 
 // ── 프로그램 한 페이지 (세로 스크롤) ──────────────────────────────────────────
 
+export interface ProgramPageHandle {
+  scrollToTop: () => void;
+  scrollToCategory: (categoryId: string) => void;
+  scrollToItem: (id: string) => void;
+}
+
 interface ProgramPageProps {
   program: ShortcutProgram;
   width: number;
+  favorites: string[];
+  highlightedId: string | null;
+  onToggleFavorite: (id: string) => void;
 }
 
-function ProgramPage({ program, width }: ProgramPageProps) {
+const ProgramPage = forwardRef<ProgramPageHandle, ProgramPageProps>(function ProgramPage(
+  { program, width, favorites, highlightedId, onToggleFavorite },
+  ref,
+) {
+  const scrollRef = useRef<ScrollView>(null);
+  const categoryRefs = useRef<Map<string, View | null>>(new Map());
+  const itemRefs = useRef<Map<string, View | null>>(new Map());
+
+  const categories = useMemo<RenderCategory[]>(() => {
+    const real: RenderCategory[] = program.categories.map(category => ({
+      id: category.id,
+      title: category.title,
+      icon: category.icon,
+      items: category.items.map((item, index) => ({
+        id: getShortcutId(program.id, category.id, index),
+        keys: item.keys,
+        desc: item.desc,
+      })),
+    }));
+
+    const favoriteItems = SHORTCUT_INDEX.filter(
+      entry => entry.programId === program.id && favorites.includes(entry.id),
+    );
+    if (favoriteItems.length === 0) return real;
+
+    return [
+      {
+        id: FAVORITES_CATEGORY_ID,
+        title: '즐겨찾기',
+        icon: '⭐',
+        items: favoriteItems.map(entry => ({ id: entry.id, keys: entry.keys, desc: entry.desc })),
+      },
+      ...real,
+    ];
+  }, [program, favorites]);
+
   // 헤더 / 본문을 번갈아 넣고, 헤더 인덱스만 sticky 로 지정한다.
-  const stickyIndices = useMemo(
-    () => program.categories.map((_, i) => i * 2),
-    [program.categories],
+  const stickyIndices = useMemo(() => categories.map((_, i) => i * 2), [categories]);
+
+  const scrollToNode = useCallback((node: View | null) => {
+    if (!node || !scrollRef.current) return;
+    const target = scrollRef.current.getNativeScrollRef();
+    if (!target) return;
+    node.measureLayout(
+      target,
+      (_x, y) => scrollRef.current?.scrollTo({ y: Math.max(y - SPACING.sm, 0), animated: true }),
+      () => {},
+    );
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollToTop: () => scrollRef.current?.scrollTo({ y: 0, animated: true }),
+      scrollToCategory: categoryId => scrollToNode(categoryRefs.current.get(categoryId) ?? null),
+      scrollToItem: id => scrollToNode(itemRefs.current.get(id) ?? null),
+    }),
+    [scrollToNode],
   );
 
   return (
     <View style={[styles.page, { width }]}>
       <ScrollView
+        ref={scrollRef}
         style={styles.vScroll}
         contentContainerStyle={styles.vScrollContent}
         stickyHeaderIndices={stickyIndices}
@@ -88,14 +216,29 @@ function ProgramPage({ program, width }: ProgramPageProps) {
         overScrollMode="never"
         scrollEventThrottle={16}
       >
-        {program.categories.flatMap(category => [
+        {categories.flatMap(category => [
           <CategoryHeader
             key={`${category.id}-h`}
             category={category}
             accent={program.color}
             accentDim={program.colorDim}
+            registerRef={node => {
+              if (node) categoryRefs.current.set(category.id, node);
+              else categoryRefs.current.delete(category.id);
+            }}
           />,
-          <CategoryBody key={`${category.id}-b`} category={category} accent={program.color} />,
+          <CategoryBody
+            key={`${category.id}-b`}
+            category={category}
+            accent={program.color}
+            favorites={favorites}
+            highlightedId={highlightedId}
+            onToggleFavorite={onToggleFavorite}
+            registerItemRef={(id, node) => {
+              if (node) itemRefs.current.set(id, node);
+              else itemRefs.current.delete(id);
+            }}
+          />,
         ])}
         <View style={styles.pageFooter}>
           <Text style={styles.pageFooterText}>
@@ -105,14 +248,22 @@ function ProgramPage({ program, width }: ProgramPageProps) {
       </ScrollView>
     </View>
   );
-}
+});
 
 // ── 위젯 ──────────────────────────────────────────────────────────────────────
 
 export default function ShortcutWidget() {
   const [pageWidth, setPageWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const pagerRef = useRef<ScrollView>(null);
+  const programRefs = useRef<Array<ProgramPageHandle | null>>([]);
+
+  const favorites = useShortcutStore(s => s.favorites);
+  const recentSearches = useShortcutStore(s => s.recentSearches);
+  const toggleFavorite = useShortcutStore(s => s.toggleFavorite);
+  const addRecentSearch = useShortcutStore(s => s.addRecentSearch);
 
   const onPagerLayout = useCallback((e: { nativeEvent: { layout: { width: number } } }) => {
     setPageWidth(e.nativeEvent.layout.width);
@@ -140,10 +291,82 @@ export default function ShortcutWidget() {
 
   const active = SHORTCUT_PROGRAMS[activeIndex] ?? SHORTCUT_PROGRAMS[0];
 
+  const activeCategories = useMemo(() => {
+    const real = active.categories.map(c => ({ id: c.id, title: c.title, icon: c.icon }));
+    const hasFavorites = SHORTCUT_INDEX.some(
+      entry => entry.programId === active.id && favorites.includes(entry.id),
+    );
+    return hasFavorites
+      ? [{ id: FAVORITES_CATEGORY_ID, title: '즐겨찾기', icon: '⭐' }, ...real]
+      : real;
+  }, [active, favorites]);
+
+  const handleOpenSearch = useCallback(() => {
+    setHighlightedId(null);
+    setSearchOpen(true);
+  }, []);
+
+  const handleCloseSearch = useCallback(() => setSearchOpen(false), []);
+
+  const handleScrollToTop = useCallback(() => {
+    programRefs.current[activeIndex]?.scrollToTop();
+  }, [activeIndex]);
+
+  const handleSelectCategory = useCallback(
+    (categoryId: string) => {
+      setSearchOpen(false);
+      programRefs.current[activeIndex]?.scrollToCategory(categoryId);
+    },
+    [activeIndex],
+  );
+
+  const handleSelectShortcut = useCallback(
+    (id: string) => {
+      const entry = SHORTCUT_INDEX_BY_ID[id];
+      if (!entry) return;
+
+      setSearchOpen(false);
+      addRecentSearch(id);
+      setHighlightedId(id);
+
+      if (entry.programIndex !== activeIndex) {
+        goTo(entry.programIndex);
+      }
+      requestAnimationFrame(() => {
+        programRefs.current[entry.programIndex]?.scrollToItem(id);
+      });
+    },
+    [activeIndex, goTo, addRecentSearch],
+  );
+
+  const headerExtra = (
+    <View style={styles.headerButtons}>
+      <TouchableOpacity
+        testID="shortcut-search-button"
+        onPress={handleOpenSearch}
+        style={styles.headerIconButton}
+        hitSlop={6}
+        accessibilityLabel="단축키 검색"
+      >
+        <Text style={styles.headerIconText}>🔍</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        testID="shortcut-scrolltop-button"
+        onPress={handleScrollToTop}
+        style={styles.headerIconButton}
+        hitSlop={6}
+        accessibilityLabel="맨 위로 이동"
+      >
+        <Text style={styles.headerIconText}>▲</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <GlowBox
       title="SHORTCUT KEYS"
       titleRight={`${TOTAL_SHORTCUT_COUNT} keys`}
+      headerExtra={headerExtra}
       style={styles.box}
       noPadding
     >
@@ -186,7 +409,7 @@ export default function ShortcutWidget() {
       </View>
 
       {/* 가로 캐러셀 — 각 페이지 안은 세로 스크롤 */}
-      <View style={styles.pager} onLayout={onPagerLayout}>
+      <View style={styles.pager} onLayout={onPagerLayout} testID="shortcut-pager">
         {pageWidth > 0 && (
           <ScrollView
             ref={pagerRef}
@@ -202,8 +425,18 @@ export default function ShortcutWidget() {
             onScroll={onScroll}
             onMomentumScrollEnd={onScroll}
           >
-            {SHORTCUT_PROGRAMS.map(program => (
-              <ProgramPage key={program.id} program={program} width={pageWidth} />
+            {SHORTCUT_PROGRAMS.map((program, i) => (
+              <ProgramPage
+                key={program.id}
+                ref={node => {
+                  programRefs.current[i] = node;
+                }}
+                program={program}
+                width={pageWidth}
+                favorites={favorites}
+                highlightedId={highlightedId}
+                onToggleFavorite={toggleFavorite}
+              />
             ))}
           </ScrollView>
         )}
@@ -227,12 +460,46 @@ export default function ShortcutWidget() {
           ))}
         </View>
       </View>
+
+      <ShortcutSearchModal
+        visible={searchOpen}
+        onClose={handleCloseSearch}
+        programId={active.id}
+        programName={active.name}
+        accent={active.color}
+        categories={activeCategories}
+        recentIds={recentSearches}
+        onSelectCategory={handleSelectCategory}
+        onSelectShortcut={handleSelectShortcut}
+      />
     </GlowBox>
   );
 }
 
 const styles = StyleSheet.create({
   box: { flex: 1 },
+
+  // 헤더 버튼 (검색 / 맨 위로)
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginRight: SPACING.xs,
+  },
+  headerIconButton: {
+    width: 24,
+    height: 24,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceHighlight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIconText: {
+    fontSize: 12,
+    color: COLORS.textPrimary,
+  },
 
   // 탭
   tabs: {
@@ -349,6 +616,11 @@ const styles = StyleSheet.create({
   rowAlt: {
     backgroundColor: COLORS.backgroundAlt,
   },
+  rowHighlighted: {
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
+    backgroundColor: COLORS.primarySurface,
+  },
   rowKeys: {
     flex: 47,
   },
@@ -358,6 +630,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     color: COLORS.textSecondary,
+  },
+  starButton: {
+    width: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  starIcon: {
+    fontSize: 14,
+    color: COLORS.textHint,
+  },
+  starIconActive: {
+    color: COLORS.primaryLighter,
   },
 
   pageFooter: {

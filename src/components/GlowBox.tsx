@@ -6,6 +6,7 @@ interface GlowBoxProps {
   children: React.ReactNode;
   title?: string;
   titleRight?: string;
+  headerExtra?: React.ReactNode;
   style?: ViewStyle;
   contentStyle?: ViewStyle;
   noPadding?: boolean;
@@ -16,6 +17,7 @@ export default function GlowBox({
   children,
   title,
   titleRight,
+  headerExtra,
   style,
   contentStyle,
   noPadding = false,
@@ -23,12 +25,13 @@ export default function GlowBox({
 }: GlowBoxProps) {
   return (
     <View style={[styles.container, dim && styles.containerDim, style]}>
-      {(title || titleRight) && (
+      {(title || titleRight || headerExtra) && (
         <View style={styles.titleBar}>
           <View style={styles.titleAccent} />
           <Text style={styles.titleText} numberOfLines={1}>
             {title ?? ''}
           </Text>
+          {headerExtra}
           {titleRight ? (
             <View style={styles.titleRightBadge}>
               <Text style={styles.titleRight} numberOfLines={1}>

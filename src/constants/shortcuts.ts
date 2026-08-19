@@ -457,3 +457,38 @@ export const TOTAL_SHORTCUT_COUNT = SHORTCUT_PROGRAMS.reduce(
 export function countShortcuts(program: ShortcutProgram): number {
   return program.categories.reduce((s, c) => s + c.items.length, 0);
 }
+
+// ── 단축키 평탄화 인덱스 (검색 · 즐겨찾기 · 최근 검색용) ──────────────────────────
+
+export function getShortcutId(programId: string, categoryId: string, index: number): string {
+  return `${programId}:${categoryId}:${index}`;
+}
+
+export interface ShortcutIndexEntry {
+  id: string;
+  programId: string;
+  programIndex: number;
+  categoryId: string;
+  categoryTitle: string;
+  keys: string;
+  desc: string;
+}
+
+export const SHORTCUT_INDEX: ShortcutIndexEntry[] = SHORTCUT_PROGRAMS.flatMap(
+  (program, programIndex) =>
+    program.categories.flatMap(category =>
+      category.items.map((item, index) => ({
+        id: getShortcutId(program.id, category.id, index),
+        programId: program.id,
+        programIndex,
+        categoryId: category.id,
+        categoryTitle: category.title,
+        keys: item.keys,
+        desc: item.desc,
+      })),
+    ),
+);
+
+export const SHORTCUT_INDEX_BY_ID: Record<string, ShortcutIndexEntry> = Object.fromEntries(
+  SHORTCUT_INDEX.map(entry => [entry.id, entry]),
+);
