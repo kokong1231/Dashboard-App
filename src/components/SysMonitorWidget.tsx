@@ -3,7 +3,6 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as Animatable from 'react-native-animatable';
 import GlowBox from './GlowBox';
 import ClaudeMonitorPage from './ClaudeMonitorPage';
-import CommunityPage from './CommunityPage';
 import SentryPage from './SentryPage';
 import { COLORS, FONTS, SPACING } from '@/theme';
 import { GitAction } from '@/api/githubApi';
@@ -171,8 +170,8 @@ export default function SysMonitorWidget() {
     return () => clearInterval(id);
   }, []);
 
-  const PAGE_DOTS   = ['● ○ ○ ○', '○ ● ○ ○', '○ ○ ● ○', '○ ○ ○ ●'];
-  const PAGE_TITLES = ['◈ CLAUDE::MONITOR', '◈ GIT::ACTIONS', '◈ COMMUNITY::FEED', '◈ SENTRY::ERR_LOG'];
+  const PAGE_DOTS   = ['● ○ ○', '○ ● ○', '○ ○ ●'];
+  const PAGE_TITLES = ['◈ CLAUDE::MONITOR', '◈ GIT::ACTIONS', '◈ SENTRY::ERR_LOG'];
   const pageIndicator = PAGE_DOTS[page]   ?? PAGE_DOTS[0];
   const pageTitle     = PAGE_TITLES[page] ?? PAGE_TITLES[0];
 
@@ -289,10 +288,7 @@ export default function SysMonitorWidget() {
               </ScrollView>
             </View>
 
-            {/* ══════════════ PAGE 2 · COMMUNITY::FEED ══════════════ */}
-            <CommunityPage width={panelSize.width} height={panelSize.height} />
-
-            {/* ══════════════ PAGE 3 · SENTRY::ERR_LOG ══════════════ */}
+            {/* ══════════════ PAGE 2 · SENTRY::ERR_LOG ══════════════ */}
             <SentryPage width={panelSize.width} height={panelSize.height} />
 
           </ScrollView>
