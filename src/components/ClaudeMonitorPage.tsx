@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import PulseText from './PulseText';
+import HourlyPulseChart from './HourlyPulseChart';
 import { useClaudeStore } from '@/store/useClaudeStore';
 import { COLORS, FONTS, SPACING } from '@/theme';
 import { useInterval } from '@/hooks/useInterval';
@@ -10,9 +11,7 @@ import { useInterval } from '@/hooks/useInterval';
 const CLAUDE_REFRESH_MS = 5 * 60 * 1000; // Notion DB에 5분 간격으로 새 행이 쌓임
 const BAR_CELLS = 14;
 const LABEL_W = 32;
-const BAR_GLYPHS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 const RESET_DROP = -5; // 사용률이 5%p 이상 급락하면 세션 리셋으로 판정
-const HOUR_AXIS = '00    06    12    18  23'; // 24칸 고정폭 축 라벨
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -207,16 +206,6 @@ export default function ClaudeMonitorPage({ width, height }: { width: number; he
     else if (delta > 0) hourly[hour] += delta;
   }
 
-  // 동적 스케일: 가장 많이 쓴 시간대가 만점(█)이 되도록 정규화
-  const maxHourly = Math.max(...hourly);
-  const hourBars = hourly
-    .map(v => {
-      if (v <= 0 || maxHourly <= 0) return '▁';
-      const idx = Math.max(1, Math.round((v / maxHourly) * (BAR_GLYPHS.length - 1)));
-      return BAR_GLYPHS[idx];
-    })
-    .join('');
-  const resetRow = Array.from({ length: 24 }, (_, h) => (resetHours.has(h) ? '▲' : ' ')).join('');
   const totalToday = Math.round(hourly.reduce((a, b) => a + b, 0));
   let peakHour = -1;
   let peakVal = 0;
@@ -328,11 +317,11 @@ export default function ClaudeMonitorPage({ width, height }: { width: number; he
         <Divider />
 
         <Section title="USAGE::TODAY" />
-        <Text style={[styles.hourBars, { color: COLORS.green }]}>{hourBars}</Text>
-        {resetHours.size > 0 && (
-          <Text style={[styles.hourBars, { color: COLORS.cyan }]}>{resetRow}</Text>
-        )}
-        <Text style={styles.hourAxis}>{HOUR_AXIS}</Text>
+        <HourlyPulseChart
+          hourly={hourly}
+          resetHours={resetHours}
+          currentHour={new Date().getHours()}
+        />
         <KVRow label="TDAY" value={totalToday <= 0 ? '--' : `${totalToday}%p USED`} />
         <KVRow
           label="PEAK"
@@ -417,15 +406,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   rowValueFull: { flex: 1, width: undefined },
-
-  hourBars: { fontFamily: FONTS.mono, fontSize: 12, letterSpacing: 0, marginBottom: 1 },
-  hourAxis: {
-    fontFamily: FONTS.mono,
-    color: COLORS.greenFaint,
-    fontSize: 12,
-    letterSpacing: 0,
-    marginBottom: 3,
-  },
 
   compGrid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 2 },
   compCell: { flexDirection: 'row', alignItems: 'center', width: '33.3%', marginBottom: 3, gap: 4 },
