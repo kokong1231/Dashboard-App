@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { memo, useCallback, useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import PulseText from './PulseText';
 import HourlyPulseChart from './HourlyPulseChart';
@@ -144,7 +144,15 @@ function KVRow({
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ClaudeMonitorPage({ width, height }: { width: number; height: number }) {
+function ClaudeMonitorPage({
+  width,
+  height,
+  active = true,
+}: {
+  width: number;
+  height: number;
+  active?: boolean;
+}) {
   const snapshots = useClaudeStore(s => s.snapshots);
   const server = useClaudeStore(s => s.server);
   const isLoading = useClaudeStore(s => s.isLoading);
@@ -157,6 +165,26 @@ export default function ClaudeMonitorPage({ width, height }: { width: number; he
   }, [fetch]);
 
   useInterval(fetch, CLAUDE_REFRESH_MS);
+
+  // 오늘 시간대별 사용량: 5시간 사용률의 증가분을 시간대(0~23시)별로 합산.
+  // 급락(RESET_DROP 이하)은 사용이 아니라 세션 리셋이므로 리셋 시각으로 기록.
+  // snapshots가 바뀔 때만 재계산 → 차트에 같은 참조가 전달되어 불필요한 재그리기 방지.
+  const { hourly, resetHours, currentHour } = useMemo(() => {
+    const asc = [...snapshots].reverse();
+    const hrs: number[] = new Array(24).fill(0);
+    const resets = new Set<number>();
+    for (let i = 1; i < asc.length; i++) {
+      const prevPct = asc[i - 1].fiveHourPct;
+      const curPct = asc[i].fiveHourPct;
+      const ts = asc[i].timestamp;
+      if (prevPct == null || curPct == null || !ts) continue;
+      const hour = new Date(ts).getHours();
+      const delta = curPct - prevPct;
+      if (delta <= RESET_DROP) resets.add(hour);
+      else if (delta > 0) hrs[hour] += delta;
+    }
+    return { hourly: hrs, resetHours: resets, currentHour: new Date().getHours() };
+  }, [snapshots]);
 
   if (isLoading && snapshots.length === 0) {
     return (
@@ -189,22 +217,6 @@ export default function ClaudeMonitorPage({ width, height }: { width: number; he
   }
 
   const latest = snapshots[0];
-
-  // 오늘 시간대별 사용량: 5시간 사용률의 증가분을 시간대(0~23시)별로 합산.
-  // 급락(RESET_DROP 이하)은 사용이 아니라 세션 리셋이므로 리셋 시각으로 기록.
-  const asc = [...snapshots].reverse();
-  const hourly: number[] = new Array(24).fill(0);
-  const resetHours = new Set<number>();
-  for (let i = 1; i < asc.length; i++) {
-    const prevPct = asc[i - 1].fiveHourPct;
-    const curPct = asc[i].fiveHourPct;
-    const ts = asc[i].timestamp;
-    if (prevPct == null || curPct == null || !ts) continue;
-    const hour = new Date(ts).getHours();
-    const delta = curPct - prevPct;
-    if (delta <= RESET_DROP) resetHours.add(hour);
-    else if (delta > 0) hourly[hour] += delta;
-  }
 
   const totalToday = Math.round(hourly.reduce((a, b) => a + b, 0));
   let peakHour = -1;
@@ -320,7 +332,8 @@ export default function ClaudeMonitorPage({ width, height }: { width: number; he
         <HourlyPulseChart
           hourly={hourly}
           resetHours={resetHours}
-          currentHour={new Date().getHours()}
+          currentHour={currentHour}
+          active={active}
         />
         <KVRow label="TDAY" value={totalToday <= 0 ? '--' : `${totalToday}%p USED`} />
         <KVRow
@@ -346,6 +359,8 @@ export default function ClaudeMonitorPage({ width, height }: { width: number; he
     </View>
   );
 }
+
+export default memo(ClaudeMonitorPage);
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 

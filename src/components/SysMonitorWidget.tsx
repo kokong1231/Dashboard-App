@@ -210,7 +210,7 @@ export default function SysMonitorWidget() {
             style={{ flex: 1 }}>
 
             {/* ══════════════ PAGE 0 · CLAUDE::MONITOR ══════════════ */}
-            <ClaudeMonitorPage width={panelSize.width} height={panelSize.height} />
+            <ClaudeMonitorPage width={panelSize.width} height={panelSize.height} active={page === 0} />
 
             {/* ══════════════ PAGE 1 · GIT::ACTIONS ══════════════ */}
             <View style={{ width: panelSize.width, height: panelSize.height }}>
