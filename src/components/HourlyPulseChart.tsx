@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import Animated, {
+  SharedValue,
   Easing,
   cancelAnimation,
   useAnimatedProps,
@@ -8,7 +9,15 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
+import Svg, {
+  Circle,
+  Defs,
+  Line,
+  LinearGradient,
+  Path,
+  Stop,
+  Text as SvgText,
+} from 'react-native-svg';
 import { COLORS, FONTS } from '@/theme';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -21,8 +30,16 @@ const PAD_X = 8; // 양 끝 라벨이 잘리지 않을 만큼만 여백
 const PAD_TOP = 14; // 최대값 라벨 영역
 const PAD_BOTTOM = 26; // 리셋 마커 + 시간 축 라벨 영역
 const BEEP_MS = 1000; // 1초마다 "띡"
-const SWEEP_MS = 6000; // 스캔 헤드가 00시 → 23시를 한 번 훑는 시간 (BEEP_MS 배수)
-const TRAIL_LEN = 70; // 밝게 남는 잔상 길이(px)
+const SWEEP_MS = 2000; // 스캔 헤드가 00시 → 23시를 한 번 훑는 시간 (BEEP_MS 배수)
+const TRAIL_LEN = 120; // 밝게 남는 잔상 길이(px)
+// 잔상 그라데이션: 헤드에서 멀수록 짧은 겹이 빠져 점점 흐려짐 (길이 비율, 불투명도)
+const TRAIL_LAYERS: [number, number][] = [
+  [1, 0.12],
+  [0.75, 0.18],
+  [0.5, 0.25],
+  [0.3, 0.35],
+  [0.15, 0.6],
+];
 const LABEL_EVERY = 2; // 시간 라벨 간격(시간)
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -87,11 +104,6 @@ export default function HourlyPulseChart({
   }, [sweep, beep]);
 
   const { xs, ys, cum, total } = geom;
-
-  const trailProps = useAnimatedProps(() => {
-    const s = sweep.value * total;
-    return { strokeDashoffset: TRAIL_LEN - s };
-  });
 
   // 호 길이 s 지점의 좌표
   const headPos = (s: number) => {
@@ -195,7 +207,13 @@ export default function HourlyPulseChart({
           })}
 
           {/* 기본 선 + 영역 */}
-          <Path d={geom.area} fill={COLORS.greenGlow} />
+          <Defs>
+            <LinearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={COLORS.green} stopOpacity={0.35} />
+              <Stop offset="1" stopColor={COLORS.green} stopOpacity={0} />
+            </LinearGradient>
+          </Defs>
+          <Path d={geom.area} fill="url(#areaGrad)" />
           <Path
             d={geom.line}
             stroke={COLORS.greenDim}
@@ -227,16 +245,16 @@ export default function HourlyPulseChart({
           )}
 
           {/* 심박 스캔: 밝은 잔상 + 헤드 + 1초 펄스 링 */}
-          <AnimatedPath
-            d={geom.line}
-            stroke={COLORS.greenBright}
-            strokeWidth={2.2}
-            fill="none"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            strokeDasharray={`${TRAIL_LEN} ${total + TRAIL_LEN}`}
-            animatedProps={trailProps}
-          />
+          {TRAIL_LAYERS.map(([ratio, opacity]) => (
+            <TrailLayer
+              key={ratio}
+              d={geom.line}
+              total={total}
+              len={TRAIL_LEN * ratio}
+              opacity={opacity}
+              sweep={sweep}
+            />
+          ))}
           <AnimatedCircle
             fill="none"
             stroke={COLORS.greenBright}
@@ -247,6 +265,36 @@ export default function HourlyPulseChart({
         </Svg>
       )}
     </View>
+  );
+}
+
+/** 헤드에서 끝나는 길이 len의 잔상 한 겹. 여러 겹을 포개 그라데이션을 만든다. */
+function TrailLayer({
+  d,
+  total,
+  len,
+  opacity,
+  sweep,
+}: {
+  d: string;
+  total: number;
+  len: number;
+  opacity: number;
+  sweep: SharedValue<number>;
+}) {
+  const props = useAnimatedProps(() => ({ strokeDashoffset: len - sweep.value * total }));
+  return (
+    <AnimatedPath
+      d={d}
+      stroke={COLORS.greenBright}
+      strokeWidth={2.2}
+      strokeOpacity={opacity}
+      fill="none"
+      strokeLinejoin="round"
+      strokeLinecap="round"
+      strokeDasharray={`${len} ${total + len}`}
+      animatedProps={props}
+    />
   );
 }
 
