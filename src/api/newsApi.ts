@@ -42,7 +42,7 @@ async function fetchHNStories(query: string, hitsPerPage: number): Promise<Hacke
 
 // ── Korean RSS fetcher ────────────────────────────────────────────────────────
 
-interface RSSItem {
+export interface RSSItem {
   title: string;
   link: string;
   pubDate: string;
@@ -73,7 +73,7 @@ function extractThumbnail(description: string): string | undefined {
   return undefined;
 }
 
-function parseRSSItems(xml: string, sourceName: string): RSSItem[] {
+export function parseRSSItems(xml: string, sourceName: string): RSSItem[] {
   const items: RSSItem[] = [];
   // Split on <item> boundaries
   const parts = xml.split('<item>');

@@ -6,16 +6,19 @@ import { useNewsStore } from '@/store/useNewsStore';
 import { useNotionStore } from '@/store/useNotionStore';
 import { useGitStore } from '@/store/useGitStore';
 import { useClaudeStore } from '@/store/useClaudeStore';
+import { useTechBriefStore } from '@/store/useTechBriefStore';
 import MatrixBackground from '@/components/MatrixBackground';
 import HeaderBar from '@/components/HeaderBar';
 import WeatherWidget from '@/components/WeatherWidget';
 import CalendarWidget from '@/components/CalendarWidget';
 import NotionWidget from '@/components/NotionWidget';
+import TechBriefWidget from '@/components/TechBriefWidget';
 import NewsWidget from '@/components/NewsWidget';
 import SysMonitorWidget from '@/components/SysMonitorWidget';
 import GitPushToast from '@/components/GitPushToast';
 import { COLORS, SPACING } from '@/theme';
 import { useInterval } from '@/hooks/useInterval';
+import { useHourlyBrief } from '@/hooks/useHourlyBrief';
 
 export default function DashboardScreen() {
   const fetchWeather = useWeatherStore(s => s.fetch);
@@ -25,6 +28,7 @@ export default function DashboardScreen() {
   const loadGitActions   = useGitStore(s => s.loadActions);
   const gitActions       = useGitStore(s => s.actions);
   const fetchClaude      = useClaudeStore(s => s.fetch);
+  const initTechBrief    = useTechBriefStore(s => s.init);
 
   // Adaptive polling interval: 10s when a run is in-progress, 30s otherwise
   const hasRunning = gitActions.some(a => a.status === 'in_progress');
@@ -38,6 +42,7 @@ export default function DashboardScreen() {
     loadGit();
     loadGitActions();
     fetchClaude();
+    initTechBrief();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -48,6 +53,9 @@ export default function DashboardScreen() {
     fetchNotion();
     loadGit();
   }, 10000);
+
+  // Tech Brief: 앱이 포그라운드일 때만 매 정각 Claude 요약 생성
+  useHourlyBrief();
 
   // Workflow runs: adaptive — 10s when in_progress, 30s otherwise
   useInterval(loadGitActions, actionsInterval);
@@ -84,9 +92,16 @@ export default function DashboardScreen() {
             </View>
           </Animated.View>
 
-          {/* Center: Notion */}
+          {/* Center: Notion (top) + Tech Brief (bottom) */}
           <Animated.View entering={FadeInUp.duration(600).delay(400)} style={styles.colCenter}>
-            <NotionWidget />
+            <View style={styles.centerStack}>
+              <View style={styles.notionArea}>
+                <NotionWidget />
+              </View>
+              <View style={styles.briefArea}>
+                <TechBriefWidget />
+              </View>
+            </View>
           </Animated.View>
 
           {/* Right: News + SysMonitor */}
@@ -139,6 +154,11 @@ const styles = StyleSheet.create({
   leftStack: { flex: 1, gap: SPACING.xs },
   weatherArea: { flex: 6 },
   calendarArea: { flex: 4 },
+
+  // Center column stack
+  centerStack: { flex: 1, gap: SPACING.xs },
+  notionArea: { flex: 1 },
+  briefArea: { flex: 1 },
 
   // Right column stack
   rightStack: { flex: 1, gap: SPACING.xs },

@@ -3,8 +3,10 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import PulseText from './PulseText';
 import HourlyPulseChart from './HourlyPulseChart';
 import { useClaudeStore } from '@/store/useClaudeStore';
+import { ClaudeApiUsageSummary } from '@/types';
 import { COLORS, FONTS, SPACING } from '@/theme';
 import { useInterval } from '@/hooks/useInterval';
+import { formatTokens, formatUsd } from '@/utils/formatters';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -12,6 +14,8 @@ const CLAUDE_REFRESH_MS = 5 * 60 * 1000; // Notion DB에 5분 간격으로 새 �
 const BAR_CELLS = 14;
 const LABEL_W = 32;
 const RESET_DROP = -5; // 사용률이 5%p 이상 급락하면 세션 리셋으로 판정
+// 선택: .env에 월 예산을 넣으면 남은 예산 표시 (API 키로는 크레딧 잔액 조회 불가)
+const API_BUDGET_USD = Number(process.env.CLAUDE_API_BUDGET_USD ?? '') || null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -142,6 +146,63 @@ function KVRow({
   );
 }
 
+function periodStr(p: { calls: number; tokens: number; costUsd: number }): string {
+  if (p.calls === 0) return '--';
+  return `${formatUsd(p.costUsd)} · ${p.calls} CALL · ${formatTokens(p.tokens)}`;
+}
+
+/** 남은 비율 → 사용 비율(%) */
+function usedPct(remaining: number | null, limit: number | null): number | null {
+  if (remaining == null || !limit) return null;
+  return Math.round((1 - remaining / limit) * 100);
+}
+
+function ApiUsageRows({ usage }: { usage: ClaudeApiUsageSummary }) {
+  const rl = usage.last?.rateLimit;
+  const left = API_BUDGET_USD == null ? null : Math.max(0, API_BUDGET_USD - usage.month.costUsd);
+  return (
+    <>
+      {API_BUDGET_USD != null && left != null && (
+        <>
+          <UsageBar
+            label="BDGT"
+            pct={Math.min(100, Math.round((usage.month.costUsd / API_BUDGET_USD) * 100))}
+          />
+          <KVRow
+            label="LEFT"
+            value={`${formatUsd(left)} / ${formatUsd(API_BUDGET_USD)} MON`}
+            color={usageColor(Math.round((usage.month.costUsd / API_BUDGET_USD) * 100))}
+          />
+        </>
+      )}
+      <KVRow label="TDAY" value={periodStr(usage.today)} />
+      <KVRow label="7D  " value={periodStr(usage.week)} />
+      <KVRow label="MON " value={periodStr(usage.month)} />
+      {rl && (
+        <>
+          <UsageBar label="TPM " pct={usedPct(rl.tokensRemaining, rl.tokensLimit)} />
+          <KVRow
+            label="LEFT"
+            value={`TOK ${formatTokens(rl.tokensRemaining)}/${formatTokens(rl.tokensLimit)} · REQ ${
+              rl.requestsRemaining ?? '--'
+            }/${rl.requestsLimit ?? '--'}`}
+            color={COLORS.cyan}
+          />
+        </>
+      )}
+      {usage.last && (
+        <KVRow
+          label="LAST"
+          value={`${clockStr(usage.last.at)} · ${formatUsd(usage.last.costUsd)} · ${formatTokens(
+            usage.last.inputTokens,
+          )}→${formatTokens(usage.last.outputTokens)}`}
+          color={COLORS.greenDim}
+        />
+      )}
+    </>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 function ClaudeMonitorPage({
@@ -159,6 +220,7 @@ function ClaudeMonitorPage({
   const hasError = useClaudeStore(s => s.hasError);
   const fetchedAt = useClaudeStore(s => s.fetchedAt);
   const fetch = useClaudeStore(s => s.fetch);
+  const apiUsage = useClaudeStore(s => s.apiUsage);
 
   const handleRefresh = useCallback(() => {
     fetch();
@@ -347,6 +409,14 @@ function ClaudeMonitorPage({
           value={resetHours.size === 0 ? 'NONE' : `▲ ${resetListStr}`}
           color={resetHours.size === 0 ? COLORS.greenDim : COLORS.cyan}
         />
+        <Divider />
+
+        <Section title="API::KEY" />
+        {apiUsage ? (
+          <ApiUsageRows usage={apiUsage} />
+        ) : (
+          <KVRow label="STAT" value="NO DATA" color={COLORS.greenDim} />
+        )}
         <Divider />
 
         <View style={styles.footer}>

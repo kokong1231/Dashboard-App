@@ -88,3 +88,33 @@ export function uvIndexLabel(uv: number): string {
 export function padEnd(str: string, len: number): string {
   return str.length >= len ? str : str + ' '.repeat(len - str.length);
 }
+
+// ── Hourly slot (Tech Brief) ───────────────────────────────────────────────
+/** 해당 시각이 속한 정각 슬롯 시작 시각 */
+export function hourSlotStart(date: Date = new Date()): Date {
+  const d = new Date(date);
+  d.setMinutes(0, 0, 0);
+  return d;
+}
+
+/** "2026-10-20 13:00" (로컬 시각) */
+export function hourSlotKey(date: Date = new Date()): string {
+  const d = hourSlotStart(date);
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  return `${y}-${mo}-${day} ${hh}:00`;
+}
+
+/** 토큰 수 축약: 1234 → "1.2K", 2400000 → "2.4M" */
+export function formatTokens(n: number | null): string {
+  if (n == null) return '--';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+export function formatUsd(n: number): string {
+  return n >= 100 ? `$${n.toFixed(0)}` : `$${n.toFixed(2)}`;
+}

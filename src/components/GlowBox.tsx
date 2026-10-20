@@ -5,7 +5,7 @@ import { COLORS, FONTS, GLOW_DIM, SPACING } from '@/theme';
 interface GlowBoxProps {
   children: React.ReactNode;
   title?: string;
-  titleRight?: string;
+  titleRight?: React.ReactNode;
   style?: ViewStyle;
   contentStyle?: ViewStyle;
   noPadding?: boolean;
@@ -28,11 +28,13 @@ export default function GlowBox({
           <Text style={styles.titleText} numberOfLines={1}>
             {title ?? ''}
           </Text>
-          {titleRight ? (
+          {typeof titleRight === 'string' ? (
             <Text style={styles.titleRight} numberOfLines={1}>
               {titleRight}
             </Text>
-          ) : null}
+          ) : (
+            titleRight ?? null
+          )}
         </View>
       )}
       <View style={[styles.content, noPadding && styles.noPadding, contentStyle]}>

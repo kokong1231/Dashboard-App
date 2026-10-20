@@ -212,3 +212,70 @@ export interface ClaudeServerStatus {
   components: ClaudeServerComponent[];
   notices: ClaudeServerNotice[];
 }
+
+// ── Tech Brief (Claude 매시간 요약) ───────────────────────────────────────────
+export type TechBriefCategory = 'AI' | 'DEV' | 'IT' | 'SECURITY' | 'URGENT';
+export type TechBriefUrgency = 'low' | 'medium' | 'high' | 'critical';
+
+export interface TechBriefSource {
+  title: string;
+  url: string;
+}
+
+export interface TechBriefItem {
+  category: TechBriefCategory;
+  urgency: TechBriefUrgency;
+  title: string;
+  summary: string;
+  points: string[];
+  sources: TechBriefSource[];
+  /** 요약 내용을 시각화하는 자체 완결형 HTML 조각 (<style>/<svg>/<script>) */
+  animation: string;
+}
+
+export interface TechBrief {
+  /** 로컬 시각 기준 정각 슬롯, e.g. "2026-10-20 13:00" */
+  slotKey: string;
+  slotStart: string;
+  headline: string;
+  items: TechBriefItem[];
+  model: string;
+  createdAt: string;
+  notionPageId?: string;
+}
+
+/** Notion 목록용 경량 메타 (본문 JSON은 상세 진입 시 로드) */
+export interface TechBriefMeta {
+  pageId: string;
+  slotKey: string;
+  slotStart: string;
+  headline: string;
+  itemCount: number;
+  urgent: boolean;
+}
+
+// ── Claude API 사용량 ─────────────────────────────────────────────────────────
+export interface ClaudeApiRateLimit {
+  tokensRemaining: number | null;
+  tokensLimit: number | null;
+  requestsRemaining: number | null;
+  requestsLimit: number | null;
+  reset: string | null;
+}
+
+export interface ClaudeApiUsageRecord {
+  at: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  costUsd: number;
+  rateLimit: ClaudeApiRateLimit;
+}
+
+export interface ClaudeApiUsageSummary {
+  today: { calls: number; tokens: number; costUsd: number };
+  week: { calls: number; tokens: number; costUsd: number };
+  month: { calls: number; tokens: number; costUsd: number };
+  last: ClaudeApiUsageRecord | null;
+}
