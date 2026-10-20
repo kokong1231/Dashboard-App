@@ -15,6 +15,7 @@ import { ClaudeApiUsageRecord, TechBrief, TechBriefMeta } from '@/types';
 import { hourSlotKey, hourSlotStart } from '@/utils/formatters';
 
 const AUTO_KEY = 'techBrief.autoEnabled';
+const ROTATE_KEY = 'techBrief.rotateEnabled';
 const MIN_HEADLINES = 5;
 
 export type BriefPhase = 'idle' | 'collecting' | 'synthesizing' | 'saving';
@@ -22,6 +23,8 @@ export type BriefPhase = 'idle' | 'collecting' | 'synthesizing' | 'saving';
 interface TechBriefState {
   hydrated: boolean;
   autoEnabled: boolean;
+  /** 브리프 항목을 순서대로 자동 순환 */
+  rotateEnabled: boolean;
   phase: BriefPhase;
   phaseStartedAt: number | null;
   list: TechBriefMeta[];
@@ -33,6 +36,7 @@ interface TechBriefState {
 
   init: () => Promise<void>;
   setAutoEnabled: (on: boolean) => void;
+  setRotateEnabled: (on: boolean) => void;
   loadList: () => Promise<TechBriefMeta[]>;
   openBrief: (pageId: string, latest?: boolean) => Promise<void>;
   /** force=false면 이번 슬롯이 이미 있으면 건너뜀 (자동 스케줄용) */
@@ -46,6 +50,7 @@ function errMsg(e: unknown): string {
 export const useTechBriefStore = create<TechBriefState>((set, get) => ({
   hydrated: false,
   autoEnabled: true,
+  rotateEnabled: true,
   phase: 'idle',
   phaseStartedAt: null,
   list: [],
@@ -56,8 +61,12 @@ export const useTechBriefStore = create<TechBriefState>((set, get) => ({
 
   init: async () => {
     try {
-      const saved = await AsyncStorage.getItem(AUTO_KEY);
-      if (saved != null) set({ autoEnabled: saved === '1' });
+      const [auto, rotate] = await Promise.all([
+        AsyncStorage.getItem(AUTO_KEY),
+        AsyncStorage.getItem(ROTATE_KEY),
+      ]);
+      if (auto != null) set({ autoEnabled: auto === '1' });
+      if (rotate != null) set({ rotateEnabled: rotate === '1' });
     } catch {
       // 저장소 접근 실패 시 기본값(ON) 유지
     }
@@ -75,6 +84,11 @@ export const useTechBriefStore = create<TechBriefState>((set, get) => ({
   setAutoEnabled: on => {
     set({ autoEnabled: on });
     AsyncStorage.setItem(AUTO_KEY, on ? '1' : '0').catch(() => {});
+  },
+
+  setRotateEnabled: on => {
+    set({ rotateEnabled: on });
+    AsyncStorage.setItem(ROTATE_KEY, on ? '1' : '0').catch(() => {});
   },
 
   loadList: async () => {

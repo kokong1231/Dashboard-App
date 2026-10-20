@@ -1,6 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeIn,
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/navigation/RootNavigator';
@@ -14,6 +21,9 @@ import BriefAnimationStage from './BriefAnimationStage';
 import BriefLoadingOverlay from './BriefLoadingOverlay';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
+
+/** 항목 자동 순환 간격 — 길어진 요약을 읽을 시간 */
+const ROTATE_MS = 30 * 1000;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -57,28 +67,82 @@ function minutesToNextHour(): number {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function AutoToggle() {
-  const on = useTechBriefStore(s => s.autoEnabled);
-  const setOn = useTechBriefStore(s => s.setAutoEnabled);
+function ToggleChip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity
-      onPress={() => setOn(!on)}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      onPress={onPress}
+      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
       style={[styles.toggle, on ? styles.toggleOn : styles.toggleOff]}
     >
       <Text style={[styles.toggleText, { color: on ? COLORS.greenBright : COLORS.greenDim }]}>
-        {on ? 'AUTO ■ ON' : 'AUTO □ OFF'}
+        {`${label} ${on ? '■ ON' : '□ OFF'}`}
       </Text>
     </TouchableOpacity>
   );
 }
 
+function HeaderToggles() {
+  const auto = useTechBriefStore(s => s.autoEnabled);
+  const setAuto = useTechBriefStore(s => s.setAutoEnabled);
+  const rotate = useTechBriefStore(s => s.rotateEnabled);
+  const setRotate = useTechBriefStore(s => s.setRotateEnabled);
+  return (
+    <View style={styles.toggles}>
+      <ToggleChip label="CYCLE" on={rotate} onPress={() => setRotate(!rotate)} />
+      <ToggleChip label="AUTO-GEN" on={auto} onPress={() => setAuto(!auto)} />
+    </View>
+  );
+}
+
+/** 다음 항목으로 넘어가기까지 남은 시간 — resetKey가 바뀔 때마다 0부터 다시 채움 */
+function RotateProgress({ running, resetKey }: { running: boolean; resetKey: string }) {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    cancelAnimation(progress);
+    progress.value = 0;
+    if (running) {
+      progress.value = withTiming(1, { duration: ROTATE_MS, easing: Easing.linear });
+    }
+    return () => cancelAnimation(progress);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, resetKey]);
+
+  const fillStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
+
+  return (
+    <View style={styles.rotateTrack}>
+      {running && <Animated.View style={[styles.rotateFill, fillStyle]} />}
+    </View>
+  );
+}
+
+function DetailSection({ label, color, body }: { label: string; color: string; body?: string }) {
+  if (!body) return null;
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHead}>
+        <Text style={[styles.sectionLabel, { color }]}>{`// ${label}`}</Text>
+        <View style={[styles.sectionRule, { backgroundColor: color }]} />
+      </View>
+      <Text style={styles.sectionBody}>{body}</Text>
+    </View>
+  );
+}
+
 function ItemDetail({
   item,
+  index,
+  total,
   onOpenUrl,
+  onInteract,
 }: {
   item: TechBriefItem;
+  index: number;
+  total: number;
   onOpenUrl: (url: string, title: string) => void;
+  /** 사용자가 읽는 중(스크롤) — 순환 타이머 리셋 */
+  onInteract: () => void;
 }) {
   const cColor = categoryColor(item.category);
   return (
@@ -86,6 +150,7 @@ function ItemDetail({
       style={styles.detailScroll}
       contentContainerStyle={styles.detailContent}
       showsVerticalScrollIndicator={false}
+      onScrollBeginDrag={onInteract}
     >
       <View style={styles.detailHead}>
         <Text style={[styles.catBadge, { color: cColor, borderColor: cColor }]}>
@@ -94,15 +159,33 @@ function ItemDetail({
         <Text style={[styles.urgency, { color: urgencyColor(item.urgency) }]}>
           {`▲ ${item.urgency.toUpperCase()}`}
         </Text>
+        <View style={styles.flex} />
+        <Text style={styles.counter}>{`${String(index + 1).padStart(2, '0')}/${String(
+          total,
+        ).padStart(2, '0')}`}</Text>
       </View>
       <Text style={styles.itemTitle}>{item.title}</Text>
       <Text style={styles.summary}>{item.summary}</Text>
-      {item.points.map((pt, i) => (
-        <View key={i} style={styles.pointRow}>
-          <Text style={styles.pointBullet}>{'›'}</Text>
-          <Text style={styles.pointText}>{pt}</Text>
+
+      <DetailSection label="배경" color={COLORS.greenDim} body={item.context} />
+      <DetailSection label="영향" color={COLORS.amber} body={item.impact} />
+      <DetailSection label="대응" color={COLORS.cyan} body={item.action} />
+
+      {item.points.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHead}>
+            <Text style={[styles.sectionLabel, { color: COLORS.greenBright }]}>{'// 핵심'}</Text>
+            <View style={[styles.sectionRule, { backgroundColor: COLORS.greenBright }]} />
+          </View>
+          {item.points.map((pt, i) => (
+            <View key={i} style={styles.pointRow}>
+              <Text style={styles.pointBullet}>{'›'}</Text>
+              <Text style={styles.pointText}>{pt}</Text>
+            </View>
+          ))}
         </View>
-      ))}
+      )}
+
       {item.sources.length > 0 && (
         <View style={styles.sources}>
           {item.sources.map((src, i) => (
@@ -204,12 +287,30 @@ export default function TechBriefWidget() {
   const [selState, setSelState] = useState({ key: briefKey, idx: 0 });
   const sel = selState.key === briefKey ? selState.idx : 0;
   const setSel = (idx: number) => setSelState({ key: briefKey, idx });
+  // 사용자 조작(탭 선택·스크롤) 시 순환 타이머를 처음부터 다시
+  const [touchNonce, setTouchNonce] = useState(0);
+  const rotateEnabled = useTechBriefStore(s => s.rotateEnabled);
   const [nextMin, setNextMin] = useState(minutesToNextHour);
 
   useInterval(() => setNextMin(minutesToNextHour()), 30 * 1000);
 
   const busy = phase !== 'idle';
-  const item = current?.items[Math.min(sel, (current?.items.length ?? 1) - 1)];
+  const count = current?.items.length ?? 0;
+  const item = current?.items[Math.min(sel, Math.max(0, count - 1))];
+  const rotating = rotateEnabled && mode === 'brief' && !busy && !isOpening && count > 1;
+
+  useEffect(() => {
+    if (!rotating) return;
+    const id = setTimeout(() => {
+      setSelState(st => ({
+        key: briefKey,
+        idx: ((st.key === briefKey ? st.idx : 0) + 1) % count,
+      }));
+    }, ROTATE_MS);
+    return () => clearTimeout(id);
+  }, [rotating, sel, briefKey, count, touchNonce]);
+
+  const onInteract = () => setTouchNonce(n => n + 1);
 
   const onOpenUrl = (url: string, title: string) => {
     if (/^https?:\/\//.test(url)) nav.navigate('WebView', { url, title });
@@ -225,7 +326,7 @@ export default function TechBriefWidget() {
   };
 
   return (
-    <GlowBox title="◈ TECH::BRIEF" titleRight={<AutoToggle />} style={styles.box} noPadding>
+    <GlowBox title="◈ TECH::BRIEF" titleRight={<HeaderToggles />} style={styles.box} noPadding>
       {/* Status bar */}
       <View style={styles.statusBar}>
         {current ? (
@@ -282,7 +383,10 @@ export default function TechBriefWidget() {
                 return (
                   <TouchableOpacity
                     key={i}
-                    onPress={() => setSel(i)}
+                    onPress={() => {
+                      setSel(i);
+                      onInteract();
+                    }}
                     style={[
                       styles.tab,
                       { borderColor: active ? c : COLORS.greenFaint },
@@ -296,13 +400,20 @@ export default function TechBriefWidget() {
                 );
               })}
             </ScrollView>
+            <RotateProgress running={rotating} resetKey={`${briefKey}|${sel}|${touchNonce}`} />
 
             <View style={styles.body}>
               <View style={styles.stageArea}>
                 <BriefAnimationStage key={`${current.slotKey}-${sel}`} html={item.animation} />
               </View>
               <View style={styles.detailArea}>
-                <ItemDetail item={item} onOpenUrl={onOpenUrl} />
+                <ItemDetail
+                  item={item}
+                  index={sel}
+                  total={count}
+                  onOpenUrl={onOpenUrl}
+                  onInteract={onInteract}
+                />
               </View>
             </View>
           </Animated.View>
@@ -350,6 +461,7 @@ const styles = StyleSheet.create({
   loadingText: { fontFamily: FONTS.mono, color: COLORS.amber, fontSize: FONTS.sizes.xs },
 
   // Toggle
+  toggles: { flexDirection: 'row', alignItems: 'center' },
   toggle: {
     borderWidth: 1,
     paddingHorizontal: 5,
@@ -397,6 +509,8 @@ const styles = StyleSheet.create({
   tab: { borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 2 },
   tabActive: { backgroundColor: 'rgba(0,255,65,0.08)' },
   tabText: { fontFamily: FONTS.mono, fontSize: 10, letterSpacing: 0.5 },
+  rotateTrack: { height: 1, backgroundColor: 'rgba(0,255,65,0.08)' },
+  rotateFill: { height: '100%', backgroundColor: COLORS.green, opacity: 0.6 },
 
   // Body: 애니메이션 무대(좌) + 요약(우)
   body: { flex: 1, flexDirection: 'row', padding: SPACING.xs, gap: SPACING.xs },
@@ -404,7 +518,7 @@ const styles = StyleSheet.create({
   detailArea: { flex: 9 },
 
   detailScroll: { flex: 1 },
-  detailContent: { paddingHorizontal: 4 },
+  detailContent: { paddingHorizontal: 6 },
   detailHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   catBadge: {
     fontFamily: FONTS.mono,
@@ -416,26 +530,38 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   urgency: { fontFamily: FONTS.mono, fontSize: 9, letterSpacing: 1 },
+  counter: { fontFamily: FONTS.mono, color: COLORS.greenFaint, fontSize: 9, letterSpacing: 1 },
   itemTitle: {
     fontFamily: FONTS.mono,
     color: COLORS.greenBright,
-    fontSize: FONTS.sizes.xs,
+    fontSize: FONTS.sizes.sm,
     fontWeight: '700',
-    marginBottom: 4,
-    lineHeight: 18,
+    marginBottom: 6,
+    lineHeight: 22,
   },
   summary: {
     fontFamily: FONTS.mono,
     color: COLORS.green,
-    fontSize: 11,
-    lineHeight: 16,
-    marginBottom: 4,
+    fontSize: 12,
+    lineHeight: 19,
+    marginBottom: 2,
   },
-  pointRow: { flexDirection: 'row', marginBottom: 2 },
-  pointBullet: { fontFamily: FONTS.mono, color: COLORS.greenDim, fontSize: 11, width: 12 },
-  pointText: { flex: 1, fontFamily: FONTS.mono, color: COLORS.white, fontSize: 10, lineHeight: 15 },
+  section: { marginTop: 8 },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
+  sectionLabel: { fontFamily: FONTS.mono, fontSize: 10, letterSpacing: 1, fontWeight: '700' },
+  sectionRule: { flex: 1, height: 1, marginLeft: 6, opacity: 0.25 },
+  sectionBody: {
+    fontFamily: FONTS.mono,
+    color: COLORS.green,
+    fontSize: 11,
+    lineHeight: 18,
+    opacity: 0.9,
+  },
+  pointRow: { flexDirection: 'row', marginBottom: 3 },
+  pointBullet: { fontFamily: FONTS.mono, color: COLORS.greenBright, fontSize: 11, width: 12 },
+  pointText: { flex: 1, fontFamily: FONTS.mono, color: COLORS.white, fontSize: 11, lineHeight: 17 },
   sources: {
-    marginTop: 4,
+    marginTop: 8,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,255,65,0.08)',
     paddingTop: 3,

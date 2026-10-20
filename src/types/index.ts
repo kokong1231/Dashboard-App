@@ -227,6 +227,12 @@ export interface TechBriefItem {
   urgency: TechBriefUrgency;
   title: string;
   summary: string;
+  /** 배경 — 왜 이런 일이 생겼는지 (이전 버전 브리프에는 없음) */
+  context?: string;
+  /** 개발자·서비스에 미치는 영향 */
+  impact?: string;
+  /** 권장 대응 / 다음 단계 */
+  action?: string;
   points: string[];
   sources: TechBriefSource[];
   /** 요약 내용을 시각화하는 자체 완결형 HTML 조각 (<style>/<svg>/<script>) */

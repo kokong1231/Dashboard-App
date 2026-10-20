@@ -380,7 +380,25 @@ export async function saveTechBrief(brief: TechBrief): Promise<string> {
       heading_3: { rich_text: [text(`${String(idx + 1).padStart(2, '0')} [${item.category}] ${item.title}`)] },
     },
     { object: 'block', type: 'paragraph', paragraph: { rich_text: [text(item.summary)] } },
-    ...item.points.map(pt => ({
+    ...(
+      [
+        ['배경', item.context],
+        ['영향', item.impact],
+        ['대응', item.action],
+      ] as const
+    )
+      .filter(([, body]) => !!body)
+      .map(([label, body]) => ({
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            { type: 'text', text: { content: `${label}  ` }, annotations: { bold: true, color: 'green' } },
+            text(body as string),
+          ],
+        },
+      })),
+    ...item.points.slice(0, 5).map(pt => ({
       object: 'block',
       type: 'bulleted_list_item',
       bulleted_list_item: { rich_text: [text(pt)] },
