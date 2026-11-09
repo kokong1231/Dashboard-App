@@ -285,3 +285,29 @@ export interface ClaudeApiUsageSummary {
   month: { calls: number; tokens: number; costUsd: number };
   last: ClaudeApiUsageRecord | null;
 }
+
+// ── Notion board (kanban) ───────────────────────────────────────────────────
+export interface NotionBoardColumn {
+  name: string;
+  color: string;
+}
+
+export interface NotionBoardCard {
+  id: string;
+  url: string;
+  title: string;
+  status: string;
+  emoji?: string;
+  project?: string;
+  projectColor?: string;
+  due?: string;
+  memo?: string;
+  createdTime: string;
+}
+
+export interface NotionBoard {
+  title: string;
+  statusProp: string;
+  columns: NotionBoardColumn[];
+  cards: NotionBoardCard[];
+}

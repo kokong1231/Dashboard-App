@@ -14,24 +14,21 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/navigation/RootNavigator';
 import { useNotionStore } from '@/store/useNotionStore';
-import { fetchPageBlocks, queryDatabasePages, richTextToPlain } from '@/api/notionApi';
-import { NotionBlock, NotionPageListItem, NotionRichText } from '@/types';
-import { formatRelativeTime } from '@/utils/formatters';
+import { fetchPageBlocks, richTextToPlain } from '@/api/notionApi';
+import { NotionBlock, NotionBoardCard, NotionRichText } from '@/types';
 import GlowBox from './GlowBox';
-import PulseText from './PulseText';
+import NotionBoard from './NotionBoard';
 import { useInterval } from '@/hooks/useInterval';
 import { COLORS, FONTS, SPACING } from '@/theme';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 const PAGE_POLL_INTERVAL = 30 * 1000;
-const DB_POLL_INTERVAL   = 30 * 1000;
 
 // ── View stack ────────────────────────────────────────────────────────────────
 
 type NotionView =
-  | { kind: 'home' }
-  | { kind: 'database'; id: string; title: string }
+  | { kind: 'board' }
   | { kind: 'page'; id: string; title: string; url: string };
 
 // ── Notion color → app color ─────────────────────────────────────────────────
@@ -342,283 +339,6 @@ function BlockView({ block, numberedIdx, onNavigatePage, onNavigateDb, onOpenUrl
   }
 }
 
-// ── Page tree helpers ─────────────────────────────────────────────────────────
-
-interface PageTreeItem {
-  page: NotionPageListItem;
-  depth: number;
-  hasChildren: boolean;
-}
-
-function buildPageTree(pages: NotionPageListItem[]): PageTreeItem[] {
-  // Only non-DB pages for the tree
-  const nonDb = pages.filter(p => p.parentType !== 'database_id');
-  const allIds = new Set(nonDb.map(p => p.id));
-
-  // Build child map
-  const childMap = new Map<string, NotionPageListItem[]>();
-  nonDb.forEach(p => {
-    if (p.parentPageId && allIds.has(p.parentPageId)) {
-      const arr = childMap.get(p.parentPageId) ?? [];
-      arr.push(p);
-      childMap.set(p.parentPageId, arr);
-    }
-  });
-
-  // Root = workspace-level or parent not in our list
-  // Keep API return order (matches Notion's natural order) — no extra sort
-  const roots = nonDb.filter(
-    p => p.parentType === 'workspace' || !p.parentPageId || !allIds.has(p.parentPageId),
-  );
-
-  const result: PageTreeItem[] = [];
-
-  function dfs(p: NotionPageListItem, depth: number) {
-    // Keep children in API return order as well
-    const children = childMap.get(p.id) ?? [];
-    result.push({ page: p, depth, hasChildren: children.length > 0 });
-    children.forEach(c => dfs(c, depth + 1));
-  }
-
-  roots.forEach(p => dfs(p, 0));
-  return result;
-}
-
-// ── DB property chips ─────────────────────────────────────────────────────────
-
-function PropChips({ page }: { page: NotionPageListItem }) {
-  const chips: { label: string; color: string }[] = [];
-
-  if (page.dateStart) {
-    const d = new Date(page.dateStart);
-    const now = new Date();
-    const isToday = d.toDateString() === now.toDateString();
-    const isPast  = d < now && !isToday;
-    chips.push({
-      label: isToday ? 'TODAY' : `${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`,
-      color: isPast ? COLORS.red : isToday ? COLORS.amber : COLORS.cyan,
-    });
-    if (page.dateEnd) {
-      const e = new Date(page.dateEnd);
-      chips.push({
-        label: `→ ${String(e.getMonth()+1).padStart(2,'0')}.${String(e.getDate()).padStart(2,'0')}`,
-        color: COLORS.greenDim,
-      });
-    }
-  }
-
-  if (page.status) {
-    chips.push({ label: page.status.toUpperCase(), color: notionColor(page.statusColor) });
-  }
-  if (page.priority) {
-    chips.push({ label: page.priority.toUpperCase(), color: notionColor(page.selectColor) });
-  } else if (page.select) {
-    chips.push({ label: page.select.toUpperCase(), color: notionColor(page.selectColor) });
-  }
-  if (page.checked !== undefined) {
-    chips.push({ label: page.checked ? '[✓]' : '[ ]', color: page.checked ? COLORS.greenBright : COLORS.greenDim });
-  }
-  if (page.tags?.length) {
-    page.tags.slice(0, 2).forEach(t => chips.push({ label: t.toUpperCase(), color: COLORS.greenDim }));
-  }
-
-  if (chips.length === 0) return null;
-  return (
-    <View style={styles.chipsRow}>
-      {chips.map((c, i) => (
-        <View key={i} style={[styles.chip, { borderColor: c.color }]}>
-          <Text style={[styles.chipText, { color: c.color }]}>{c.label}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-// ── Home view ─────────────────────────────────────────────────────────────────
-
-interface HomeViewProps {
-  onNavigatePage: (id: string, title: string, url: string) => void;
-  onNavigateDb: (id: string, title: string) => void;
-}
-
-function HomeView({ onNavigatePage, onNavigateDb }: HomeViewProps) {
-  const { databases, pages, isLoading, error, fetch, forceRefresh } = useNotionStore();
-  const lastFetched = useNotionStore(s => s.lastFetched);
-
-  useEffect(() => { fetch(); }, [fetch]);
-
-  const syncStr = lastFetched
-    ? new Date(lastFetched).toLocaleTimeString('en-GB', { hour12: false })
-    : null;
-
-  if (isLoading && databases.length === 0 && pages.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <PulseText style={styles.loadingText} duration={600}>
-          {'> CONNECTING TO NOTION...'}
-        </PulseText>
-      </View>
-    );
-  }
-
-  if (error && databases.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>{`> ERR: ${error}`}</Text>
-        <TouchableOpacity onPress={forceRefresh} style={styles.retryBtn}>
-          <Text style={styles.retryText}>{'[ RETRY ]'}</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  const treeItems = buildPageTree(pages);
-
-  return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-
-      {/* ── Databases ── */}
-      {databases.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeadRow}>
-            <Text style={styles.sectionHeader}>DATABASES</Text>
-            <View style={styles.sectionLine} />
-          </View>
-          {databases.map(db => (
-            <TouchableOpacity
-              key={db.id}
-              onPress={() => onNavigateDb(db.id, db.title)}
-              activeOpacity={0.7}
-              style={styles.dbRow}>
-              <Text style={styles.rowIcon}>{db.emoji ?? '▪'}</Text>
-              <Text style={styles.dbTitle} numberOfLines={1}>{db.title}</Text>
-              <Text style={styles.arrowText}>{' ›'}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {/* ── Page tree ── */}
-      {treeItems.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeadRow}>
-            <Text style={styles.sectionHeader}>PAGES</Text>
-            <View style={styles.sectionLine} />
-          </View>
-          {treeItems.map(({ page, depth, hasChildren }) => {
-            const indent = depth * 14;
-            const prefix = depth === 0 ? (page.emoji ?? '📄') : (hasChildren ? '├─ ' : '└─ ');
-            return (
-              <TouchableOpacity
-                key={page.id}
-                onPress={() => onNavigatePage(page.id, page.title, page.url)}
-                activeOpacity={0.7}
-                style={[styles.pageRow, { paddingLeft: SPACING.xs + indent }]}>
-                <Text style={[styles.rowIcon, depth > 0 && styles.treePrefix]}>{prefix}</Text>
-                <View style={styles.pageTitleCol}>
-                  <Text style={styles.pageTitle} numberOfLines={1}>{page.title}</Text>
-                </View>
-                <Text style={styles.pageTime}>{formatRelativeTime(page.lastEdited)}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-
-      {databases.length === 0 && treeItems.length === 0 && (
-        <Text style={styles.noData}>{'> NO DATA\n> CHECK INTEGRATION PERMISSIONS'}</Text>
-      )}
-
-      <View style={styles.footer}>
-        <Text style={styles.syncText}>{syncStr ? `SYNC: ${syncStr}` : 'NOT SYNCED'}</Text>
-        <TouchableOpacity onPress={forceRefresh}>
-          <Text style={styles.refreshBtn}>{isLoading ? 'REFRESHING...' : '[↻ REFRESH]'}</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={{ height: SPACING.lg }} />
-    </ScrollView>
-  );
-}
-
-// ── Database view ─────────────────────────────────────────────────────────────
-
-interface DatabaseViewProps {
-  id: string;
-  onNavigatePage: (id: string, title: string, url: string) => void;
-}
-
-function DatabaseView({ id, onNavigatePage }: DatabaseViewProps) {
-  const [pages, setPages]       = useState<NotionPageListItem[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
-  const [lastSync, setLastSync] = useState<Date | null>(null);
-
-  const doFetch = useCallback(() => {
-    queryDatabasePages(id)
-      .then(p => { setPages(p); setLastSync(new Date()); setError(null); })
-      .catch(e => setError(e instanceof Error ? e.message : 'FETCH ERROR'))
-      .finally(() => setLoading(false));
-  }, [id]);
-
-  useEffect(() => { setLoading(true); doFetch(); }, [doFetch]);
-  useInterval(doFetch, DB_POLL_INTERVAL);
-
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={COLORS.green} />
-        <Text style={styles.loadingText}>{'> QUERYING DATABASE...'}</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>{`> ERR: ${error.toUpperCase()}`}</Text>
-      </View>
-    );
-  }
-
-  if (pages.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.noData}>{'> NO ENTRIES FOUND'}</Text>
-      </View>
-    );
-  }
-
-  const syncStr = lastSync ? lastSync.toLocaleTimeString('en-GB', { hour12: false }) : null;
-
-  return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-      <View style={styles.dbViewHeader}>
-        <Text style={styles.sectionHeader}>{`${pages.length} ENTRIES`}</Text>
-        {syncStr && <Text style={styles.syncText}>{`SYNC: ${syncStr}`}</Text>}
-      </View>
-      {pages.map((page, idx) => (
-        <TouchableOpacity
-          key={page.id}
-          onPress={() => onNavigatePage(page.id, page.title, page.url)}
-          activeOpacity={0.7}
-          style={[styles.dbEntryRow, idx % 2 === 1 && styles.dbEntryRowAlt]}>
-          {/* Index + emoji/icon */}
-          <Text style={styles.dbEntryIdx}>{String(idx + 1).padStart(2, '0')}</Text>
-          <View style={styles.dbEntryContent}>
-            <View style={styles.dbEntryTitleRow}>
-              {page.emoji ? <Text style={styles.dbEntryEmoji}>{page.emoji}</Text> : null}
-              <Text style={styles.dbEntryTitle} numberOfLines={1}>{page.title}</Text>
-              <Text style={styles.pageTime}>{formatRelativeTime(page.lastEdited)}</Text>
-            </View>
-            <PropChips page={page} />
-          </View>
-        </TouchableOpacity>
-      ))}
-      <View style={{ height: SPACING.lg }} />
-    </ScrollView>
-  );
-}
-
 // ── Page view ─────────────────────────────────────────────────────────────────
 
 interface PageViewProps {
@@ -706,58 +426,59 @@ function PageView({ id, url: pageUrl, onNavigatePage, onNavigateDb, onOpenUrl }:
 
 export default function NotionWidget() {
   const nav = useNavigation<NavProp>();
-  const [viewStack, setViewStack] = useState<NotionView[]>([{ kind: 'home' }]);
+  const [viewStack, setViewStack] = useState<NotionView[]>([{ kind: 'board' }]);
   const currentView = viewStack[viewStack.length - 1];
-
-  const pushView = useCallback((view: NotionView) => {
-    setViewStack(prev => [...prev, view]);
-  }, []);
+  const cardCount = useNotionStore(s => s.cards.length);
 
   const popView = () => {
     setViewStack(prev => (prev.length > 1 ? prev.slice(0, -1) : prev));
   };
 
   const onNavigatePage = useCallback((id: string, title: string, url: string) => {
-    pushView({ kind: 'page', id, title, url });
-  }, [pushView]);
+    setViewStack(prev => [...prev, { kind: 'page', id, title, url }]);
+  }, []);
 
-  const onNavigateDb = useCallback((id: string, title: string) => {
-    pushView({ kind: 'database', id, title });
-  }, [pushView]);
+  const onOpenCard = useCallback((card: NotionBoardCard) => {
+    onNavigatePage(card.id, card.title, card.url);
+  }, [onNavigatePage]);
 
   const onOpenUrl = useCallback((url: string, title?: string) => {
     if (!url) return;
     nav.navigate('WebView', { url, title: title ?? url });
   }, [nav]);
 
+  // Child databases are out of scope for the board — open them in Notion instead
+  const onNavigateDb = useCallback((id: string, title: string) => {
+    onOpenUrl(`https://www.notion.so/${id.replace(/-/g, '')}`, title);
+  }, [onOpenUrl]);
+
   const breadLabel = viewStack
     .slice(1)
-    .map(v => (v.kind === 'home' ? '' : v.title.toUpperCase()))
+    .map(v => (v.kind === 'page' ? v.title.toUpperCase() : ''))
     .join(' › ');
 
-  const titleRight =
-    currentView.kind === 'home' ? undefined :
-    currentView.kind === 'database' ? 'DB' : 'PAGE';
+  const titleRight = currentView.kind === 'board' ? `BOARD · ${cardCount}` : 'PAGE';
 
   return (
     <GlowBox title="◈ NOTION::SYNC" titleRight={titleRight} style={styles.box} noPadding>
       {viewStack.length > 1 && (
         <View style={styles.breadcrumb}>
           <TouchableOpacity onPress={popView} style={styles.backBtn}>
-            <Text style={styles.backText}>{'← BACK'}</Text>
+            <Text style={styles.backText}>{'← BOARD'}</Text>
           </TouchableOpacity>
           <Text style={styles.breadLabel} numberOfLines={1}>{breadLabel}</Text>
+          {currentView.kind === 'page' && currentView.url ? (
+            <TouchableOpacity onPress={() => onOpenUrl(currentView.url, currentView.title)}>
+              <Text style={styles.backText}>{'OPEN ↗'}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       )}
 
-      {currentView.kind === 'home' && (
-        <HomeView onNavigatePage={onNavigatePage} onNavigateDb={onNavigateDb} />
-      )}
-      {currentView.kind === 'database' && (
-        <DatabaseView id={currentView.id} onNavigatePage={onNavigatePage} />
-      )}
+      {currentView.kind === 'board' && <NotionBoard onOpenCard={onOpenCard} />}
       {currentView.kind === 'page' && (
         <PageView
+          key={currentView.id}
           id={currentView.id}
           url={currentView.url}
           onNavigatePage={onNavigatePage}

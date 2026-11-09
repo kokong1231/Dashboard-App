@@ -5,6 +5,9 @@ import {
   ClaudeApiUsageSummary,
   ClaudeUsageSnapshot,
   NotionBlock,
+  NotionBoard,
+  NotionBoardCard,
+  NotionBoardColumn,
   NotionDatabaseListItem,
   NotionPageListItem,
   NotionRichText,
@@ -173,6 +176,95 @@ export async function queryDatabasePages(databaseId: string): Promise<NotionPage
       parentType: 'database_id',
       ...extractDbProps(props),
     };
+  });
+}
+
+// ── Kanban board (TODO DB) ────────────────────────────────────────────────────
+
+export const BOARD_DB_ID = 'ae9b5e11a97c4879afa2a398c7e7378d';
+
+function plainOf(arr: unknown): string {
+  return Array.isArray(arr) ? (arr as Array<{ plain_text: string }>).map(t => t.plain_text).join('') : '';
+}
+
+export async function fetchBoard(): Promise<NotionBoard> {
+  const dbRes = await notionClient.get(`/databases/${BOARD_DB_ID}`);
+  const db = dbRes.data as Record<string, unknown>;
+  const schema = db.properties as Record<string, Record<string, unknown>>;
+
+  let statusProp = '';
+  let columns: NotionBoardColumn[] = [];
+  for (const [name, def] of Object.entries(schema)) {
+    if (def.type === 'status') {
+      statusProp = name;
+      const opts = (def.status as { options: Array<{ name: string; color: string }> }).options;
+      columns = opts.map(o => ({ name: o.name, color: o.color }));
+      // Board display order: '보류' first, then '할 일'
+      const hold = columns.findIndex(c => c.name === '보류');
+      const todo = columns.findIndex(c => c.name === '할 일');
+      if (hold > -1 && todo > -1 && hold > todo) {
+        [columns[hold], columns[todo]] = [columns[todo], columns[hold]];
+      }
+      break;
+    }
+  }
+
+  const rows = await queryAll(BOARD_DB_ID, {});
+  const cards: NotionBoardCard[] = rows.map(page => {
+    const props = page.properties as Record<string, Record<string, unknown>>;
+    const card: NotionBoardCard = {
+      id: page.id as string,
+      url: page.url as string,
+      title: '(UNTITLED)',
+      status: columns[0]?.name ?? '',
+      emoji: extractEmoji(page.icon),
+      createdTime: page.created_time as string,
+    };
+    for (const [name, prop] of Object.entries(props)) {
+      switch (prop.type) {
+        case 'title':
+          card.title = plainOf(prop.title) || '(UNTITLED)';
+          break;
+        case 'status': {
+          const st = prop.status as { name: string } | null;
+          if (name === statusProp && st?.name) card.status = st.name;
+          break;
+        }
+        case 'select': {
+          const sel = prop.select as { name: string; color: string } | null;
+          if (sel?.name && !card.project) { card.project = sel.name; card.projectColor = sel.color; }
+          break;
+        }
+        case 'date': {
+          const d = prop.date as { start: string } | null;
+          if (d?.start && !card.due) card.due = d.start;
+          break;
+        }
+        case 'rich_text': {
+          const txt = plainOf(prop.rich_text).trim();
+          if (txt && !card.memo) card.memo = txt;
+          break;
+        }
+      }
+    }
+    return card;
+  });
+
+  // Due date ascending (no date last), then newest first
+  cards.sort((a, b) => {
+    if (a.due && b.due) return a.due.localeCompare(b.due);
+    if (a.due) return -1;
+    if (b.due) return 1;
+    return b.createdTime.localeCompare(a.createdTime);
+  });
+
+  const titleArr = db.title as Array<{ plain_text: string }>;
+  return { title: plainOf(titleArr) || 'BOARD', statusProp, columns, cards };
+}
+
+export async function updateCardStatus(pageId: string, statusProp: string, status: string): Promise<void> {
+  await notionClient.patch(`/pages/${pageId}`, {
+    properties: { [statusProp]: { status: { name: status } } },
   });
 }
 
